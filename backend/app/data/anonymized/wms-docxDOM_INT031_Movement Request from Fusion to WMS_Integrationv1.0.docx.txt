@@ -1,0 +1,381 @@
+**Table:**
+
+| Business / Technical Brief |
+| [Anonymized Customer]-INT031 – Movement Request Integration from Fusion to WMS 28th May 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 28-May-2024 | Amit Sharma | Draft | Initial Version |
+| 04-June-2024 | Harshada Ingole | 1.0 | Technical Design update |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | reviewer | role |
+| 04-Jun-2024 | Rakesh | Technical Lead |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+This Design Specification documents the detailed design for Movement Request Interface from Fusion to Oracle Cloud WMS.
+This document describes the functional design of the list of attributes which need to be interfaced from Fusion to Cloud WMS through Oracle Integrated Cloud Service (OIC) to create movement requests in WMS originating from min-max replenishment from Fusion Inventory Management. The design document also covers the event attribute mappings from Fusion to Oracle Cloud WMS Functional Columns.
+
+## Overview and Scope
+
+Overview
+Movement requests are requests for the movement of material within an inventory organization such as a warehouse or facility.
+These types of movement requests exist:
+- Replenishment movement requests
+- Shop floor movement requests
+Business Purpose
+Movement Request transaction enables to perform the complete process required to request movement of material, physically move material, and confirm physical movement of material. Hence, a specific interface needs to be built between Fusion and Cloud WMS as per the Business Requirement to keep movement request intact between the two systems.
+This design document focuses on building an interface between Fusion and Cloud WMS so that movement requests are performed without any issues.
+Scope
+The scope of this document is limited to functional design of the interface movement requests from Fusion to Cloud WMS System.
+Functional Overview
+Fusion Movement Request is a source for all movement requests published to WMS. These movement requests will be interfaced to WMS for different use cases.
+- Min-Max replenishment process in Fusion will trigger a movement request in WMS to move material to PRODUKTION lineside locations from respective Storage Subinventory specified as part of Min Max Setup at Subinventory Level.
+Movement Request Type; Replenishment
+Transaction Type: Movement request Transfer
+- Manual Movement request
+Manually Created in Fusion
+Movement Request Type; Replenishment
+Transaction Type: Movement request Transfer
+- RTV Lineside returns stock to be moved to the RTV sub inventory via the movement request.
+Movement Request Type; Replenishment
+Transaction Type: Movement request Transfer
+From Subinventory : Shopfloor Subinventory as captured in the Lookup.
+To Subinventory : RTV Subinventory in the Lookup
+Details of Serial and Lot Number to be transferred are captured as part of the Movement request.
+Locator in Produktion from where movement has to be executed has to be captured as part of Movement request.
+The movement request in WMS should include the following details at minimum:
+- Movement Request Number
+- Movement Request Type
+- Auto Consume Flag (Y/N)
+Item Code
+Item Quantity
+Destination Location Barcode
+Destination Location Replenishment Zone
+Movement Request Detail Custom Field 1 (Source Sub Inventory)
+The integration is a BIP-based integration wherein OIC will runs the BIP report every 10 minutes and interfaces the movement requests to WMS.
+
+# Business Objectives
+
+The following objectives were captured during the Focus Stage and are addressed by the functional designs described in this document:
+
+---
+**Table:**
+
+| Requirement ID | Category | Short description |
+| INT031 | Movement request from Fusion to WMS | This interface will publish movement requests for Warehouse Management System (WMS) downstream systems. |
+
+---
+
+## Process Overview
+
+The below picture depicts the general steps in the creation of movement requests in Fusion that will be interfaced to WMS
+
+# Mapping
+
+# Pre-Conditions
+
+- Organizations against which movement requests are created should exist in WMS.
+- Replenishment Templates should be configured in WMS to allocate inventory against the Movement Request.
+- Movement Request types (“Replenishment” and “Pick & Move”) should be configured in WMS.
+- For movement from Shop floor subinventory to RTV, Subinventories should be setup in a lookup.
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
+| Movement Request Interface Failure to WMS due to missing item in WMS | 5 | 2 | Valid error message stating the integration failure. Re-run the movement request integration |
+| Movement Request Interface Failure to WMS due to missing item movement request type in WMS | 5 | 2 | Configure the movement request type in WMS and then Re-run the movement request integration |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | comments |
+| INT001: Item Interface to WMS |  | Items against which the movement request is created should exist in WMS |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Comments |
+| XxScmMovementRequestERPToWMS | OIC runs BIP report every 10 min |  |
+|  |  |  |
+
+---
+
+# Business Use Case:
+
+- Create movement request for a serial controlled item.
+- Create movement request for a batch/lot-controlled item.
+- Create a movement request for a non-inventory item.
+- Create a movement request for inventory movement from lineside to the RTV location.
+- Create movement request for a revision controlled Item
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | open item | data required/Owner | status | impact if not closed |
+| 001 | Serial number reservation against a movement request | OC | Feature to be released in release 24B |  |
+| 002 |  |  |  |  |
+| 003 |  |  |  |  |
+| 004 |  |  |  |  |
+| 005 |  |  |  |  |
+| 006 |  |  |  |  |
+| 007 |  |  |  |  |
+
+---
+
+# Technical Overview
+
+### Scope
+
+The objective of this document is to provide [Anonymized Customer] with a Technical Specification for Outbound Integration to extract the Purchase Order Data from SCM Cloud and publish to WMS Cloud.
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| ERP | Enterprise Resource Planning |
+| SCM | Supply Chain Management |
+| OIC | Oracle integration cloud |
+| API | Application Programming Interface |
+| WMS | Warehouse Management System |
+| REST | Representational State Transfer |
+| XSD | XML Schema Definition |
+| FYI | For Your Information |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File location |
+| 1 |  |  |
+| 2 |  |  |
+| 3 |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+---
+**Table:**
+
+| Description | File |
+| Data Mapping Template for Fusion to WMS |  |
+| Sample WMS XML Payload |  |
+
+---
+
+### Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Volume |
+|  | Daily- every 5 minutes | Depends on the volume of min max replenishment movement requests created |
+
+---
+
+### Assumptions
+
+- Mapping between Movement Requests in SCM Cloud and WMS Facilities needs to be setup for this integration to extract data.
+- The integration includes the possibility to CREATE the Movement Request from WMS Cloud. It only covers create operation.
+- In case of any success/error in the integration, a notification email will be sent to the mail list configured in the OIC lookup.
+- Min Max replenishment movement requests are only to be considered.
+- The integration will be scheduled every 5 minutes a day.
+
+### High Level Approach
+
+- Integration is scheduled to run every 5 minutes a day daily and picks up all the min max replenishment type movement requests that are pending to be interfaced to WMS using BIP report.
+- The BIP report output will be then converted into WMS XML required format by invoking the Rest API echoLgfDataOrder which will do the XML transformation internally.
+- The transformed XML data will be interfaced to WMS cloud using WMS InitStageInterfaceAPI service.
+
+### Pre-Requisites
+
+Send email and SMS integration “XxCommonNotificationHandler” should be deployed in the OIC.
+“XxGetLookupVariable” integration should be deployed in the OIC.
+Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ErrNotifyEmail Address in OIC.
+Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+
+# Integration Analysis - XxScmMovementRequestERPToWMS
+
+This Integration component is responsible for for mapping Movement requests from ERP Cloud to WMS Movement requests.
+
+### Integration Components
+
+Below are the required components for this integration.
+
+---
+**Table:**
+
+| Integration Name | Integration Pattern | Package Name | Lookup Name |
+| XxScmMovementRequestERPToWMS | Scheduled Integration |  | XXDominoCommonLookup XxDominoConstantLookup |
+
+---
+
+### Required Connections
+
+---
+**Table:**
+
+| Connection Name | Connection Type | Connection Role |
+| XxDominoErpCloudConnection | Oracle ERP Cloud | Trigger and invoke |
+| XxDominoWMSConnection | REST | Trigger and invoke |
+| XxDominoBIReportConnection | SOAP | Invoke |
+
+---
+
+### Integration Outline
+
+Figure 1: Architecture Diagram
+The Following section explains the step – by- step process of publishing Purchase Orders from Fusion to WMS:
+Integration – XxScmMovementRequestERPToWMS
+- This is a scheduled orchestration integration which will run every five minutes daily.
+- AssignGlobalVariable: The Global variable will be the Integration code which will be fetched from maintained lookup –“XXDominoCommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', '  XXSCMRECEIPTADVICEERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+| var_invokeLgfIntegError | String | ‘’ |
+| var_ErrorFlag | String | 'N' |
+| var_ErrorCode | String | ‘’ |
+| var_ErrorMsg | String | ‘’ |
+
+---
+
+- FetchVariable: This step will invoke integration ‘XxGetLookupVariable(1.0)’.
+Map Activity FetchVariable: In this Map activity, ‘Integration Name’ received from Integration Metadata will be mapped to ‘Integration Code’ in Fetch Variable (request). Once ‘Integration Code’ gets passed to ‘XxGetLookupVariable(1.0)’ integration, values of variables can be retrieved.
+- InitAtp: This step is used to insert data in XXDOM_INT_INSTANCE_DETAILS_T table in autonomous database.
+Map Activity InitAtp: This Map Activity inserts data in XXDOM_INT_INSTANCE_DETAILS_T table.
+
+---
+**Table:**
+
+| Request Parameters | Values |
+| instanceId | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:instanceId |
+| integrationName | $self/nsmpr1:metadata/nsmpr1:integration/nsmpr1:name |
+| riceId | $FetchVariable/nsmpr0:GETResponse/nsmpr0:components.schemas.response-wrapper/ns35:RiceID |
+| createdBy | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:invokedBy |
+| status | 'Init' |
+| attribute1 | $tracking_var_1 |
+| attribute2 | $tracking_var_2 |
+| attribute3 | $tracking_var_3 |
+
+---
+
+- SetUpVariables:
+Below variables have been defined in this step:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| CurrentPotentialError | String | 'Error while invoking LgfData integration.' |
+| EmailFrom | String | dvm:lookupValue('XxDominoConstantLookup', 'ID', 'FromEmailId', 'Value', '') |
+| InstanceName | String | dvm:lookupValue('XxDominoConstantLookup', 'ID', 'InstanceName', 'ID', '') |
+| CompanyCode | String | dvm:lookupValue('XXDominoWmsCompanyLookup', 'Organization', /ns12:onEvent/ns18:getReceiptAdviceDetailsResponse/ns18:ReceiptAdvice/ns22:OrganizationCode, 'WMS_Company_Code', '') |
+| ParentCompanyCode | String | dvm:lookupValue('XXDominoWmsCompanyLookup', 'Organization', /ns285:onEvent/ns291:getReceiptAdviceDetailsResponse/ns291:ReceiptAdvice/ns295:OrganizationCode, 'WMS_Company_Code', '') |
+| p_vendor_name | String | ‘’ |
+| p_supplier_site_code | String | ‘’ |
+
+---
+
+- IntegrationScope: scope_updateMovemementReqToWMS
+- Invoke BIP Report to fetch the Min max replenishment movement requests which are not interfaced to WMS.
+- Read the BIP report
+- If count of movement request in the BIP Report is greater than 0, then
+- Convert the payload received from fusion ERP to WMS Request format. It is internal XML transmission. Response of this API will be sent to WMS as input parameters.
+- postInitStageInterfacePO: This step will call the WMS common api- “/wms/api/init_stage_interface/” which is responsible to post the data on into WMS system. In case of any error while calling this API, notification will be sent through common error handler integration to respective team. There are three query parameters for added for this API to send the request as below:
+- Query Parameters-
+- Async – This will be set to value as “False”.
+- Validate_xml – This will be to set to value to “True”
+- Entity- purchase_order
+- Xml_data- This will be mapped with the response of echoLgfDataOrder which will send the data as parameter to WMS API to post the data in WMS side.
+The request will be sent to WMS API as – Send query parameters as form data in message body.
+Once the data is successfully loaded into WMS side, WMS API will send consolidated response for all records in payload back to OIC, in case of any error while posting the data to WMS same will be captured by WMS API and will be send to OIC.
+- SuccessNotify: Once the data is posted into WMS side and all the operations in Integration are completed normal then success email notification will be sent to respective team through “XxCommonNotificationHandler(1.0.1)”.
+With map activity, process will map the below values to common error handler Integration.
+
+---
+**Table:**
+
+| Request Parameters | Values |
+| IntegrationCode | $self/nsmpr3:metadata/nsmpr3:integration/nsmpr3:name |
+| IntegrationID | $FetchVariable/nsmpr1:GETResponse/nsmpr1:components.schemas.response-wrapper/ns38:RiceID |
+| InstanceID | $self/nsmpr3:metadata/nsmpr3:runtime/nsmpr3:instanceId |
+| ErrorCode | NULL |
+| ErrMsg | NULL |
+| EmailFrom | $EmailFrom |
+| EmailTo | $FetchVariable/nsmpr1:GETResponse/nsmpr1:components.schemas.response-wrapper/ns38:SuccessNotify |
+| EmailSub | concat ("FYI", ":", "SUCCESS", ":", $self/nsmpr3:metadata/nsmpr3:integration/nsmpr3:name, "(", $self/nsmpr3:metadata/nsmpr3:integration/nsmpr3:version, ")", ":", $self/nsmpr3:metadata/nsmpr3:runtime/nsmpr3:instanceId ) |
+| Logging |  |
+
+---
+
+WMS Request and Response Schemas:
+
+---
+**Table:**
+
+| WMS Request Schema |  |
+| WMS Response Schema |  |
+
+---
+
+Sample WMS Response:
+
+---
+**Table:**
+
+| WMS Response | Response Message |
+| SUCCESS-True | <executeResponse xmlns="http://xmlns.oracle.com/cloud/adapter/REST/postInitStageInterfacePO_REQUEST/types">    <root xmlns="http://xmlns.oracle.com/cloud/adapter/nxsd/surrogate

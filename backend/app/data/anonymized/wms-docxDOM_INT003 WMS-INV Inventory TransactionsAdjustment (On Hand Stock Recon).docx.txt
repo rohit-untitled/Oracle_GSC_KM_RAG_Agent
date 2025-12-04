@@ -1,0 +1,345 @@
+**Table:**
+
+|  |
+| [Anonymized Customer]-INT003 WMS-INV Inventory Transactions/Adjustment (On Hand Stock Recon) 5th June 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+|  |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 01-Jul-2024 | Amit Sharma | 1a | Initial Version |
+| 12-Jul-2024 | Sudhakar V P / Meera Ganapathy | 1b | Cross Functional updated version |
+| 25-07-2024 | Shireesha Veeramalla | 1c | Technical details |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | reviewer | role |
+| 26-07-2024 | Rakesh Kumar Mishra | Technical Lead |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+The objective of this document is to provide a Design Specification for Inventory transaction and inventory reconciliation between WMS and Fusion cloud.
+- Also, to provide the necessary information with enough detail so that the Project team, have a clear understanding of the design and functional requirements.
+
+## Scope
+
+This document specifies the business context, functional requirements, and details to integrate different inventory transactions happening in WMS Cloud (cycle count, sub inventory transfer, stock write off) and the inventory balance snapshot from WMS to Fusion cloud.
+A warehouse management system (or WMS) is a software application designed to support warehouse or distribution center management and staff. They facilitate management of available resources to move and store materials into, within, and out of a warehouse, while supporting staff in material movement and storage.
+Inventory Management Cloud supports a central integration framework across Oracle Procurement Cloud, Oracle Order Management Cloud, and Oracle Inventory Management based on web services to support the interactions between WMS and Fusion Cloud.
+
+## Functional Overview
+
+Fusion Inventory Management supports a central integration framework for working with warehouse management systems (WMS). The inventory management suite of products includes Fusion Receiving, Fusion Inventory Management, and Fusion Shipping.
+All the inventory adjustment transactions performed in WMS should be interfaced to Oracle inventory to update the on-hand quantities as well as track the transactions.
+The Functional Specifications described here below refers to the integration scenario of inventory adjustment performed in WMS. The solution designed in this document is that allows to bring ‘adjusted’ stock information from WMS to SCM Cloud application. The solution design in this document will ultimately allow reflecting stock changes generated in WMS into the corresponding SCM sub inventories.
+At the present status of analysis, for the inventory adjustment integration, Inventory History files are intended as scheduled maximum every 2 minutes to create or update Oracle SCM Cloud incrementally with adjustment details.
+This integration between WMS Cloud and SCM Cloud has the purpose to cover the Inventory adjustments during the following transactions:
+Internal Slot Moves (Sub-Inventory Transfer)
+Scrap Inventory/Consume LPN (Miscellaneous Issue)
+Cycle Count Adjustments (WMS Cycle Count Issue/ WMS Cycle Count Receipt)
+Inventory Reconciliation
+
+# Business Objectives
+
+When integrating Fusion Cloud with a warehouse management system (or WMS), All changes that occur within the fusion cloud must be integrated appropriately to keep the documents in sync in Oracle WMS Cloud.
+The following figure illustrates how Inventory Management integrates with WMS systems. The Integration for Inventory Transactions from WMS to Fusion Inventory Management is used for this integration documents.
+Process flow diagram
+The above picture depicts the general steps in the Inventory Transaction business flow. The steps initiate in Warehouse Management Cloud (WMS). Once the transaction is completed in WMS, it will be sent to Fusion via OIC.
+
+## Process Overview
+
+- Internal Slot Moves (Sub Inventory Transfer)
+This section of the integration between WMS and SCM Cloud has the purpose to cover the Inventory adjustments when an inbound container (IBLPN) is moved within the warehouse. Based on the activity codes mentioned below, we need to update SCM Cloud accordingly with the quantity and serial number/lot number of inventories that was in WMS Cloud.
+- The following is a high-level view of the most relevant information to be considered:
+- Facility Code (Inventory Organization in SCM Cloud)
+- Activity codes: 22,23, 24,25 51,2,4,49,63,64
+- Item code
+- Original Quantity
+- Adjusted Quantity
+- Serial Number (for serial-controlled items)
+- Lot Number (for lot-controlled items)
+- Lock code value
+- Sequence Number of IHT Code
+
+---
+**Table:**
+
+| Process | SCM Cloud Impact | IHT Code from WMS Cloud |
+| Move LPN from one location to other. | Inventory level will be adjusted based on info transmitted from WMS Cloud. | 24, 51, 22, 25, 51, 23, 63, 64, 24,2,4,49 |
+
+---
+
+For the internal LPN Movement in WMS Cloud the diagram to illustrate process is the same used for the container lock and unlock:
+Process Flow:
+- Scrap LPN Process
+This section of the integration between WMS and SCM Cloud has the purpose to cover the Inventory adjustments when an inbound container’s inventory is written off within the warehouse. Based on the activity codes mentioned below, we need to update SCM Cloud accordingly with the quantity and serial number of inventories that was in WMS Cloud.
+- The following is a high-level view of the most relevant information to be considered:
+- Facility Code (Inventory Organization in SCM Cloud)
+- Activity codes: 2
+- Item code
+- Original Quantity
+- Adjusted Quantity
+- Serial Number (for serial-controlled items)
+- Lot Number (for lot-controlled items)
+- Lock code value
+- Reason code value
+- Sequence Number of IHT Code
+
+---
+**Table:**
+
+| Process | SCM Cloud Impact | IHT Code from WMS Cloud |
+| Consume LPN in WMS | Inventory level will be adjusted based on info transmitted from WMS Cloud. | 2 |
+
+---
+
+- Cycle Count Adjustment
+In Fusion, the items will be classified under different count classes (ABC Classification) based on a certain criterion. The items would then be updated in WMS and the cycle count process for those classes will be carried out in WMS. The adjustments would then be posted to Fusion with the transaction type as WMS Cycle Count Receipt or WMS Cycle Count Issue and the transaction source type will be Inventory.
+This section of the integration between WMS and Inventory Cloud has the purpose to cover the Inventory adjustments when Cycle count is performed in WMS. Cycle count can be performed for both Reserve and Active locations. Cycle count can be done at LPN level (CC Location LPN Scan-Scan the location and each LPN in the location) Or at LPN Detail level (CC Location Content- Scan the location and each LPN in the location, followed by the SKU quantity) or Cycle Count Active Location (Scan the location-Scan SKU-Scan Item-Enter Quantity-Scan serial/lot). Inventory history record will get created after performing Cycle count. Inventory history record will contain respective Inventory History Activity Codes with Original and Adjusted quantity.
+If Adjusted quantity value is “+ve” then the adjustments will be posted to Fusion with the transaction type as WMS Cycle Count Receipt and the transaction source type will be Inventory.
+If Adjusted quantity value is “-ve” then the adjustments will be posted to Fusion with the transaction type as WMS Cycle Count Issue and the transaction source type will be Inventory.
+- The following is a high-level view of the most relevant information to be considered:
+- Facility Code (Inventory Organization in Fusion Cloud)
+- Activity codes (40,41,53,19)
+- Item code
+- Original Quantity
+- Adjusted Quantity
+- Lot Number
+- Expiry Date
+- Serial Number
+- Lock code value
+- Sequence Number of IHT Code
+- Group Number
+
+---
+**Table:**
+
+| Process | SCM Cloud Impact | IHT Code from WMS Cloud |
+| CC LPN Scan (Reserve Location)  -Ve Adjustment | Inventory level will be adjusted based on info transmitted from WMS Cloud. | 41,51,40 |
+| CC LPN Scan (Reserve Location) +Ve Adjustment | Inventory level will be adjusted based on info transmitted from WMS Cloud. | 41,51.39 |
+| CC LPN Detail Scan (Reserve Location) -Ve Adjustment | Inventory level will be adjusted based on info transmitted from WMS Cloud. | 41,51,40,53 |
+| CC LPN Detail Scan (Reserve Location) +Ve Adjustment | Inventory level will be adjusted based on info transmitted from WMS Cloud. | 41,51,39,53 |
+| CC Active Location | Inventory level will be adjusted based on info transmitted from WMS Cloud. | 19 |
+
+---
+
+Process Flow:
+- Inventory Reconciliation from WMS to Fusion
+The business objective is to create a visibility of both WMS and Fusion balances for comparison, hence enabling users to resolve any processing exceptions.
+Any adjustment required, will be done manually (i.e.: there will be no ‘Force balances’).
+Steps to execute this process:
+- In Fusion, Run Purge Inventory Balance Messages Process
+- Ensure No Errors in ‘Inventory Transactions’ and ‘Shipment and Receipts
+- In WMS, Run WMS based reports (snapshot view of all facilities/inventory organizations) at silent hours i.e. after facility working hours.
+- In Fusion, Run Manage Inventory Balances Process
+- In WMS, Run ‘WMS to Fusion Reconciliation Discrepancy Report’ to view the organizations where discrepancies are reported comparing between Fusion and WMS.
+- Parameters to execute this report:
+- Business Unit
+- Source
+- Report displays below values:
+- In case of Error:
+- Organization Code
+- Organization Name
+- Source
+- Sub inventory
+- Lot or Serial Controlled
+- Item Number
+- New On-Hand Quantity
+- Error Message
+- Pending Approvals:
+- Organization Code
+- Organization Name
+- Source
+- Item Number
+- Lot or Serial Number
+- Sub inventory
+- Locator
+- On Hand Quantity
+- On Hand Quantity UOM
+- New On Hand Quantity
+- New On Hand Quantity UOM
+- Adjustment Quantity
+- Adjustment Quantity UOM
+- Adjustment Percentage
+- Adjustment Value Currency
+- Adjustment Value
+- Creation Date
+- WMS Extraction Date
+- In Fusion, Navigate to ‘Manage Inventory Balances Messages in Spreadsheet’ – ADFdi spreadsheet
+- Review the Errors and Correct, as required
+The inventory balances integration enables you to:
+- Use the Inventory Balance Transactions service to post inventory balance messages from an WMS system.
+- Enable users to resolve any processing exceptions and.
+- Purge inventory balance messages periodically.
+Use the following processes and task to interface with external systems to improve tracking and visibility across your supply chain, including partners:
+- Manage Inventory Balances Processes and.
+- Purge Inventory Balance Messages Process.
+Manage Inventory Balances Process
+This ESS Job process processes the imported inventory balance messages in the interface tables.
+Purge Inventory Balance Messages Process
+Use this ESS Job process to purge the historical balance inventory messages collected over time in the interface tables.  Using the processing status parameter, you can purge error, successful, or all messages between a date range.
+By integrating Fusion Inventory Cloud to the WMS System, which will help both the WMS system and Fusion Inventory in sync in terms of Inventory balances.
+
+# Mapping
+
+# Pre-Conditions
+
+- The Fusion Inventory Organization structure should be mapped with WMS Inventory Organization structure. i.e., Inventory organization and Sub-inventory of Fusion should be mapped with WMS.
+- Items should be active and in sync in Fusion Inventory and WMS.
+- UOMs should be active and in sync in Fusion Inventory.
+- On Hand / Stock should be in sync between WMS and Fusion in the corresponding Inventory Org / SubInventories / Serial / Lot
+- Following Transaction Types should be available in Fusion:
+- WMS Cycle Count Receipt
+- WMS Cycle Count Issue
+- There should not be any stuck transaction in WMS, OIC and Fusion Interface. If there is any stuck transaction, then need to be cleared.
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | comments |
+| WMS Items (INT001) |  |  |
+| INV WMS Receipt Advice -PO (Except Cancellation process) (INT004) |  |  |
+| INV WMS Receipt Advice - ASN (Supplier portal) ( Except - ASN Attachments and Cancellation) (INT034) |  |  |
+| INV WMS Receipt Advice -RMA (Sales Order) (INT005) |  |  |
+| WMS INV Receipt Confirmation (PO & RMA) (INT006) |  |  |
+| INV WMS Shipment Requests (ship set + delivery ID) (INT007) WMS INV Shipment Confirmation (SO)  & Transfer Order (INT008) |  |  |
+| WMS INV Receipt Corrections (INT037) |  |  |
+| WMS-ASN Creation for Transfer Order (INT045) WMS INV Transfer Order Receipt (INT043) WMS- ASN serial attachment modification (INT044)  INV WMS Transfer Order Creation (delivery ID) (INT042) |  |  |
+| Min Max Replenishment - Movement Request (INT031) Min-Max Pick Confirmation response (INT032) WMS INV PO Returns (RTV Integration) (INT028) QC Integration (INT040)  Create RTV Stock in WMS (INT047) INV WMS FG Creation (Composite Create LPN) (INT041) |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Data volume |
+|  | Schedule job for inventory transactions scheduled to run in WMS every 2 minutes |  |
+|  | Inventory Reconciliation reports scheduled to run <Check with [Anonymized Customer] on the frequency> |  |
+
+---
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | open item | data required | status | impact if not closed |
+| 001 |  |  |  |  |
+
+---
+
+# Business Use Case:
+
+- Perform sub inventory transfer from one sub inventory to another.
+- Write off stock from WMS using Consume LPN transaction for non-inventory item.
+- Write off stock from WMS using Consume LPN transaction for serial-controlled item.
+- Write off stock from WMS using Consume LPN transaction for lot-controlled item.
+- Perform cycle count of a reserve location at LPN level in WMS.
+- Perform cycle count of a reserve location at LPN detail level in WMS (for serial-controlled item)
+- Perform cycle count of a reserve location at LPN detail level in WMS (for lot-controlled item)
+- Perform cycle count of a reserve location at LPN detail level in WMS (for non-inventory item)
+- Perform cycle count of an active location at LPN detail level in WMS (for lot-controlled item)
+- Perform cycle count of an active location at LPN detail level in WMS (for serial-controlled item)
+- Perform cycle count of an active location at LPN detail level in WMS (for non-inventory item)
+- Run inventory reconciliation reports from WMS.
+- End of Each Day take the snapshot of inventory balances.
+- Extract inventory balances from WMS
+- Confirm that the inventory balances are processed and in sync with WMS system.
+
+# Technical Overview
+
+### Scope
+
+The objective of this document is to provide [Anonymized Customer] with a Technical Specification of Inbound Integration for Inventory Transactions/Adjustments from WMS to Fusion.
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| ERP | Enterprise Resource Planning |
+| SCM | Supply Chain Management |
+| OIC | Oracle integration cloud |
+| API | Application Programming Interface |
+| SaaS | Software as a service |
+| PaaS | Platform as a Service |
+| BI Publisher | Business Intelligence Publisher |
+| UCM | Universal Content Management |
+| WMS | Warehouse Management System |
+| ESS | Oracle Enterprise Scheduler |
+| REST | Representational State Transfer |
+| XML | Extensible Markup Language |
+| XSD | XML Schema Definition |
+| URL | Uniform Resource Locator |
+| CSV | Comma-Separated Values |
+| ICS | Oracle Integration Cloud Service |
+| HTTP | Hypertext Transfer Protocol |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File location |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+### Frequency
+
+TBD
+
+### Assumptions
+
+- The Fusion Inventory Organization structure should be mapped with WMS Inventory Organization structure. i.e. Inventory organization and Sub-inventory of Fusion should be mapped with WMS.
+- Items should be active and in sync in Fusion Inventory and WMS.
+- UOMs should be active and in sync in Fusion Inventory.
+- There should not be any stuck transaction in WMS

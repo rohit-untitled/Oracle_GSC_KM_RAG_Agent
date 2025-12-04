@@ -1,0 +1,369 @@
+**Table:**
+
+| Business / Technical Brief |
+| [Anonymized Customer]-INT006 – WMS INV Receipt Confirmation (PO,ASN & RMA) 25th  May 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 22-May-2024 | Amit Sharma | 1a | Initial Version |
+| 27-June-2024 | Akanksha Sachan | 1b | Technical Overview Update |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | Reviewer | Role |
+| 27-Jun-2024 | Rakesh Mishra | Technical Lead |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+The objective of this document is to provide a Design Specification to:
+- Provide the necessary information with enough detail so that the Project team, have a clear understanding of the design and functional requirements.
+The purpose of this integration between WMS Cloud and SCM Cloud is to cover the following receiving and delivery transactions:
+Receipts against Purchase Order, Advance Shipment Notification, ASN (from suppliers)
+Receipts against RMA originated as part of [Anonymized Customer] Returns
+Receipts and delivery of lot-controlled items
+Receipts and delivery of serial number-controlled items
+Receipts and delivery of non-inventory items
+Receipts and delivery of PRODUKTION items
+
+## Scope
+
+This document specifies the business context, functional requirements, and details to integrate the receipt and delivery transactions performed using PO/ASN/RMA in Oracle Cloud WMS to Oracle Fusion Inventory.
+A warehouse management system (or WMS) is a software application designed to support warehouse or distribution center management and staff. They facilitate management of available resources to move and store materials into, within, and out of a warehouse, while supporting staff in material movement and storage.
+Inventory Management Cloud supports a central integration framework across Oracle Procurement Cloud, Oracle Order Management Cloud, and Oracle Inventory Management based on web services to support the interactions between WMS and Fusion Cloud.
+Using these services, Inventory Management Cloud communicates Receipt Advice to Oracle Cloud WMS for processing.
+
+## Functional Overview
+
+Purchase Orders/Advance Shipment Notification/Return Material Authorization documents are created and approved in Oracle Fusion, as soon they are approved, orders are interfaced to WMS by ESS job ‘Generate Receipt Advice’ Program. In WMS, Purchase Orders/Advance Shipment Notification/Return Material Authorization are referred during receiving process in WMS, and further delivery transaction is performed in WMS.
+
+# Business Objectives
+
+When integrating Oracle Inventory Management Cloud with a warehouse management system (or WMS), there is the requirement to send the Purchase Order/ASN/RMA Information as Receipt Advice to allow the Receiving Inventory Organization in WMS to Receive and Putaway the stock.
+The Generate Receipt Advice from Inventory to WMS will push the PO/ASN/RMA to WMS for further execution in WMS. The details such as PO number, supplier information, item number, item revision & quantity are published to WMS.
+In WMS, warehouse employee is responsible in performing below operations:
+- Creation of Receipt
+- Put Away of material in specified facility along with additional details of Locator/Serials/Lot if any.
+Direct delivery of the PRODUKTION stock will be performed to the lineside locations based on the puta way rules configured in WMS. The same information will be triggered to Fusion along with the locator updates. Since the PRODUKTION stock is only maintained in Fusion, the OIC will trigger an additional request to WMS to decrement the PRODUKTION stock in WMS after the put away transaction is completed.
+
+## Process Overview
+
+The Functional Specifications described here below refers to the integration scenario of Receipt Confirmation performed through an ASN which is outbound from WMS and inbound to SCM Cloud. The solution designed in this document is that allows to bring ‘delivered’ stock information from WMS to SCM Cloud application.
+The following is a high-level view of the most relevant information to be considered:
+Facility Code (Inventory Organization in SCM Cloud)
+[Anonymized Customer] Code (Business Unit in SCM Cloud)
+Activity code (Codes 1, 22,23,24, 25,4,49,2 and 51)
+Item code
+Shipment Number (ASN, Advance Shipment Notice)
+Purchase Order Number
+RMA Number
+Received Quantity
+Lot/Batch Number
+Serial Number
+ref_value_6 (Shipment Type)
+ref_value_14 (VendorId)
+ref_value_15 (VendorSiteId)
+
+# Mapping
+
+# Pre-Conditions
+
+- Suppliers should be interfaced to WMS from Fusion Procurement Cloud (INT002)
+- Purchase Order Type should be configured in WMS.
+- Shipment (ASN) Type should be configured in WMS.
+- Fusion sub inventories needs to be defined as lock code in WMS and should be assigned at location level.
+- PO in the fusion should be in approved status.
+- PO lines in the fusion should be in open status.
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact (1 to 5) | Probability (1 to 5) | Mitigation |
+| PO interfaced to WMS with supplier details missing | 2 | 2 | Re-run the supplier integration first and then the PO receipt advice integration |
+| ASN Created in WMS with ASN type missing |  |  | Define ASN type in WMS and rerun the integration. |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | Comments |
+| WMS Items (INT001) |  | Items should be interfaced to WMS from Fusion PDH |
+| WMS Suppliers (INT002) |  | Suppliers should be interfaced to WMS from Fusion Procurement |
+| INV WMS Receipt Advice -PO (INT004) |  | PO should be interfaced to WMS from Fusion Procurement |
+| INV WMS Receipt Advice – ASN (INT034) |  | ASN should be interfaced to WMS from Fusion Inventory Cloud |
+| INV WMS Receipt Advice -RMA (Sales Order) (INT005) |  | RMA should be interfaced to WMS from Fusion OM |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Data volume |
+|  | Generate Inventory History Extract (WMS Job) ‘scheduled to run every 2 mins |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | Open Item | Data Required | Status | Impact if not Closed |
+| 001 |  |  |  |  |
+| 002 |  |  |  |  |
+| 003 |  |  |  |  |
+| 004 |  |  |  |  |
+| 005 |  |  |  |  |
+| 006 |  |  |  |  |
+| 007 |  |  |  |  |
+
+---
+
+# Business Use Case:
+
+- Perform receipt and delivery of a standard item without any attribute against a PO/ASN/RMA
+- Perform receipt and delivery of a serial controlled item against a PO/ASN/RMA
+- Perform receipt and delivery of a lot and expiry-controlled item against a PO/ASN/RMA
+- Perform receipt and delivery of a lot controlled item against a PO/ASN/RMA
+- Perform receipt and delivery of a PRODUKTION item against a PO/ASN/RMA
+
+# Technical Overview
+
+### Scope
+
+The objective of this document is to provide a Technical Specification of Inbound Integration Receipt Confirmation flow between Warehouse Management System (WMS) and Oracle Fusion Inventory Management.
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| ERP | Enterprise Resource Planning |
+| SCM | Supply Chain Management |
+| OIC | Oracle Integration Cloud |
+| WMS | Warehouse Management System |
+| REST | Representational State Transfer |
+| XSD | XML Schema Definition |
+| FYI | For Your Information |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File Location |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+---
+**Table:**
+
+| Description | File |
+| Data Mapping -1 |  |
+| Data Mapping -1 |  |
+
+---
+
+### Assumptions
+
+- Inventory organizations of Fusion Inventory should be mapped with WMS Facilities.
+- Mapping between WMS Receipt Confirmation Request and ERP Request should be in place for this integration to work effectively.
+- In case of any success/error in the integration, a notification email will be sent to the mail list configured in the OIC lookup.
+
+### High Level Approach
+
+- Fetch the Receipt Confirmation related information from WMS.
+
+### High Level Flow Diagram
+
+### Pre-Requisites
+
+Send Email Integration “XxCommonNotificationHandler” should be deployed in the OIC.
+Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
+Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+Lookup “XxDominoWmsSubInvLookup” should be present in OIC.
+Integration Analysis –XxScmReceiptConfirmationWmsToErp, XxScmReceiptConfirmationPutAwayWmsToErp
+This Integration component is responsible for communicating Receipt confirmation and performing putaway to Fusion Inventory sent by WMS system.
+
+### Integration Components
+
+Below are the required components for this integration.
+
+---
+**Table:**
+
+| Integration Name | Integration Pattern | Lookup Name |
+| XxScmReceiptConfirmationWmsToErp | App Driven Orchestration | XXDominoCommonLookup, XxDominoConstantLookup, LOOKUP_Email_properties |
+| XxScmReceiptConfirmationPutAwayWmsToErp | App Driven Orchestration | XXDominoCommonLookup, XxDominoConstantLookup, LOOKUP_Email_properties, XxDominoWmsLockCodeLookup |
+
+---
+
+### Required Connections
+
+---
+**Table:**
+
+| Connection Name | Connection Type | Connection Role |
+| XxDominoWMSConnection | REST | Trigger and invoke |
+| XxOicRestTrigger | REST | Trigger |
+| XxDominoErpRestConnection_WMSINT | REST | Trigger and invoke |
+
+---
+
+- Integration: XxScmReceiptConfirmationWmsToErp
+- postReceiptConfirmation: It uses Rest adapter to fetch the receipt confirmation related information from WMS.
+- Switch condition:
+- Route 1: activity_code='1' OR activity_code='72'
+- Invoke: Receive- Invoking XxDominoErpRestConnection_WMSINT to perform receiving.
+Map Activity: WMS- ERP mapping is being done in this step.
+- ReceiptConfirmationAlert: After performing receiving, in this step, we are sending email notification to the concerned team.
+- Switch condition: check_valid_IHTs:
+callPUTAWAY_POST_RECEIVE: Calling putaway integration in this step if the switch condition satisfies.
+- Route 3: Otherwise
+InvokePutawayIntegration:
+In this step, invoking integration to perform putaway.
+Map Activity: WMS- ERP mapping is being done in this step.
+- Integration: XxScmReceiptConfirmationPutAwayWmsToErp
+- postReceiptConfirmation: It uses Rest adapter to fetch the receipt confirmation related information from WMS.
+- For Each inventory_history:
+- ReceiveTXNHistory1: In this step, below WMS REST API is being invoked (GET Method) to fetch details from WMS:
+/resources/11.13.18.05/receivingTransactionsHistory
+- AssignParentTxnKey: This is a data stitch action performed to generate parentTxnKey.
+- AssignParentTxnId: This is a data stitch action performed to generate parentTxnId.
+- concatOfTxnIDValue: This is a data stitch action performed to generate ParentTxnKeysAndIDs.
+- InitializeVarItem:
+Initializing below variables:
+
+---
+**Table:**
+
+| Variable | Value |
+| varItemList | ‘’ |
+| varGroupNbrList | ‘’ |
+| varLocation | ‘’ |
+
+---
+
+- StageWriteDummy: Performing stage write action to dummy file in this step.
+- ForEachIHTs:
+- Switch: if LocationExist
+Then assign location to variable declared in previous step varLocation.
+- Switch:
+Route 1: If below condition satisfies, then no action to be performed.
+fn:contains($varGroupNbrList, $f2_inventory_history/ns287:inventory_history/ns287:group_nbr)
+Otherwise:
+- AssignGroupNbr:
+In this step, assign group number list to variable declared in previous step varGroupNbrList.
+- StageWriteUniqueGroupNbr: Writing group numbers in stage file in this step.
+- StageReadGroupNbrFile: Performing stage read action to read Group number file written in previous step.
+- InvokeWMSLocBarcode: Invoking below mentioned WMS api to get location details:
+/wms/lgfapi/v10/entity/location
+- Switch:
+If fn:string-length($ParentTxnKeysAndIDs) > 0
+- Putaway1: Invoking REST API in this step and performing putaway.
+- ReceiptConfirmationAlert2: After performing putaway, sending email notification to concerned team.
+- Switch:
+- Route1:
+If $Putaway1/ns297:executeResponse/ns300:response-wrapper/ns300:parts/ns300:payload/ns300:ProcessingStatusCode = 'ERROR':
+Then InvokeErrorNotification:
+In this step, we are invoking common error handler integration to send error notification to concerned team.
+- Route2:
+If count($Putaway1_REQUEST/ns20:execute/ns23:request-wrapper/ns23:parts/ns23:payload[(ns23:Subinventory = 'RECEIVING')]) > 0
+Then InvokeFusionMRCreation:
+In this step, we are invoking Movement Request integration.
+- Otherwise:
+- StageWriteStockDecrementPayload: Performing stage write operation to decrement stock in this step.
+- StageReadStockDecrement: Performing stage read operation to read stock decrement stage file.
+- Switch:
+If fn:count($StageReadStockDecrement/ns320:ReadResponse/ns319:request-wrapper/ns319:parameters/ns319:facility_id__code) > 0
+Then:
+InvokeWMSApiStockDecrementProdSub: Invoking below mentioned wms api to decrement stock in this step:
+/wms/lgfapi/v10/entity/location/update_active_inventory
+
+### Main Flow Code Snippet
+
+- Integration: XxScmReceiptConfirmationWmsToErp
+- Integration: XxScmReceiptConfirmationPutAwayWmsToErp
+Figure: Main flow code snippet
+
+### Global Fault
+
+- The global fault handler is responsible for the whole execution scope and process the exceptions occurred in the individual stages.
+- InvokeErrorNotify:
+- The global fault handler will invoke the local integration “XxCommonNotificationHandler” which captures the error occurred at any step in overall integration flow and notify it over the email.
+- Integration: XxScmReceiptConfirmationWmsToErp
+- Integration: XxScmReceiptConfirmationPutAwayWmsToErp
+Figure: Global Fault code snippet
+
+### Migration Steps
+
+- Import “XxScmReceiptConfirmationWmsToErp”, “XxScmReceiptConfirmationPutAwayWmsToErp” in OIC environment.
+- Update the OIC Connections with Password, details as per the Environment.
+- Validate the "XxCommonNotificationHandler", which is deployed in OIC.
+- Configure the Connection with Dev Instance URL, Instance Name (whenever updated) which is present in “Domino Constant lookup maintained in OIC.
+- Complete the OIC integration configuration and activate OIC service.
+
+### Unit Testing
+
+# Open and Closed Issues
+
+This section is used to summarize any open and closed questions relating to Error Handler
+
+---
+**Table:**
+
+| ID | Topic | Description | Status | Owner |
+| 1 |  |  |  |  |
+| 2 |  |  |  |  |
+
+---

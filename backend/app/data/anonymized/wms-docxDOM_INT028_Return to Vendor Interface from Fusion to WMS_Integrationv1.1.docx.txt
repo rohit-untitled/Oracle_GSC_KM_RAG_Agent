@@ -1,0 +1,340 @@
+**Table:**
+
+| Business / Technical Brief |
+| [Anonymized Customer]-INT028 – Return to Vendor Integration from Fusion to WMS 29th May 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 29-May-2024 | Amit Sharma | 1a | Initial Version |
+| 25-June-2024 | Harshada Ingole | 1b | Technical Design Updates |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | reviewer | role |
+| 25-June-2024 | Rakesh | Technical Lead |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+This Design Specification documents the detailed design for RTV Interface from Fusion Inventory Management to Oracle Cloud WMS.
+This document describes the functional design of the list of attributes which need to be interfaced from Fusion to Cloud WMS through Oracle Integrated Cloud Service (OIC) to create RTV Outbound Order in WMS. The design document also covers the event attribute mappings from Fusion to Oracle Cloud WMS Functional Columns.
+
+## Overview and Scope
+
+Overview
+All RTV transactions will be recorded first in Fusion. The fields required by Oracle Cloud WMS to carry out the transaction as an Outbound Order shall be queried from Fusion and passed on to OIC wherein the data shall be transformed and mapped to the Sales Order Shipment Outbound Integration from Fusion to Oracle Cloud WMS.
+This transformed data shall then be sent to WMS to process the RTV transaction as a sales order shipment. The Sales order will be created within WMS with an order type specifically configured for (and as) “RTV”. The sales order would then be waved, picked, packed, and shipped within Oracle Cloud WMS.
+However, the Shipment Confirmation for such Sales Orders with Order Type “Return to Vendor” will not be sent back to Fusion.
+Return to Vendor (RTV) transactions will be primarily recorded in Fusion but sent to WMS to adjust the inventory in WMS so, that both the systems are in perfect synchronization. Returns would be created using a 1-way communication from Fusion to Cloud WMS.
+Business Purpose
+[Anonymized Customer] has a requirement to record Return to Vendor transactions for received goods in certain cases such as a receipt of a damaged product, receipt of wrong product, material returns from lineside locations etc. The current Oracle Cloud WMS product does not support out of the box Return to Vendor functionality; hence a custom solution is required to capture & communicate RTV transactions between Fusion and Oracle Cloud WMS. Therefore, this requirement will be catered within Fusion and sent to Oracle Cloud WMS.
+Scope
+The scope of this document is limited to functional design of the interface which includes event to pull Return to Vendor transactions from Fusion, map the fields to Sales Order Shipment Outbound Interface within OIC and interface the RTV transaction to WMS as a Sales Order.
+Functional Overview
+The RTV order in WMS should include the following details at minimum:
+- Order Number
+- Order Type
+- Item Number
+- Quantity
+Ship to Address (Supplier Address)
+Ship Date
+Item Quantity
+Inventory Org ??
+
+# Business Objectives:
+
+# Returns to vendor (due to multiple reasons like sales returns, purchase returns owning to Quality Issues etc) need to be returned back to supplier. This will be done in fusion using RTV transaction (unreference / referenced PO return) and would result in shipment to supplier and item stock decrementing in inventory org. To keep the inventory in fusion and WMS in sync the interface will send return data to WMS to decrement the stock.
+
+---
+**Table:**
+
+| Requirement ID | Category | Short description |
+| INT028 | Return to vendor from Fusion to WMS | This interface will publish RTV order for Warehouse Management System (WMS). |
+
+---
+
+## Process Overview
+
+# The material may need to be returned to supplier due to quality issues or returns from production. These are largely bulk returns to supplier without reference to PO.
+
+# The return material is shipped to Supplier and it interfaces RTV transaction in WMS to decrement the Stock.
+
+# Mapping
+
+# Pre-Conditions
+
+- By representing the WMS as an inventory organization, virtual tracking, and visibility of inventory at the WMS location is available to users in real time.
+- Order type should be configured in WMS.
+- The Fusion Inventory Management Organization structure should be mapped with WMS Facility structure. i.e. Inventory organizations of Fusion Inventory should be mapped with WMS Facilities. Sub inventory of Fusion Inventory Management should be mapped with WMS Lock Codes.
+- The domain for which the ASN is sent should be created in WMS. Domain in case of WMS would be Business Unit and Inventory Organization in Fusion.
+- Items in WMS should be active and in sync with Fusion Product Hub.
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact (1 to 5) | Probability (1 to 5) | Mitigation |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | comments |
+| WMS Items (INT001) |  | Items should be interfaced to WMS from Fusion PDH |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Comments |
+| XxScmRTVErpToWMS | ESS Job runs every 5 minutes |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Business Use Case:
+
+- Trigger RTV from Fusion for a serial controlled item
+- Trigger RTV from Fusion for a lot-controlled item
+- Trigger RTV from Fusion for a non-inventory item
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | open item | open item | open item | data required/Owner | status | impact if not closed |
+| 001 |  |  |  |  |  |  |
+| 002 |  |  |  |  |  |  |
+| 003 |  |  |  |  |  |  |
+| 004 |  |  |  |  |  |  |
+| 005 |  |  |  |  |  |  |
+| 006 |  |  |  |  |  |  |
+| 007 |  |  |  |  |  |  |
+
+---
+
+# Technical Overview
+
+### Scope
+
+The objective of this document is to provide with a Technical Specification for Outbound Integration to Create Return from Enterprise Resource Planning (ERP) to Warehouse Management System (WMS).
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| ERP | Enterprise Resource Planning |
+| WSDL | Web Services Description Language |
+| WMS | Warehouse Management System |
+| OIC | Oracle integration cloud |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File location |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+---
+**Table:**
+
+| Description | File |
+| Data Mapping Template for ERP to WMS |  |
+| Sample Request XML Payload |  |
+
+---
+
+### Assumptions
+
+- Mapping between WMS and ERP should be in place for this integration to work effectively.
+- For end-to-end flow, connections of the Integration should be in place.
+- In case of any success/error in the integration, a notification email will be sent to the mail list configured in the OIC lookup.
+
+### High Level Approach
+
+- ” XxScmRTVErpToWMS” integration is event based.
+- If transaction type is Return to Vendor, then RTV order will be created in WMS.
+- WMS API will be invoked and Fusion fields will be mapped with WMS API xml.
+
+### High Level Flow Diagram
+
+### Pre-Requisites
+
+Send Email Integration “XxCommonNotificationHandler” should be deployed in the OIC.
+Lookup “XX[Anonymized Customer]CommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
+Lookup “Xx[Anonymized Customer]ConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+“XxGetLookupVariable” Integration should be deployed in the OIC to fetch local variables.
+
+# Integration Analysis – XxScmRTVErpToWMS
+
+This is Create Return Transaction event based integration from ERP to WMS. It will create Return to Vendor Order in WMS to pick, pack and ship.
+
+### Integration Components
+
+Below are the required components for this integration.
+
+---
+**Table:**
+
+| Integration Name | Integration Pattern | Package Name | Lookup Name |
+| XxScmRTVErpToWMS | App Driven Orchestration |  | XX[Anonymized Customer]CommonLookup, Xx[Anonymized Customer]ConstantLookup |
+
+---
+
+### Required Connections
+
+---
+**Table:**
+
+| Connection Name | Connection Type | Connection Role |
+| Xx[Anonymized Customer]WMSConnection | REST | Trigger and invoke |
+| Xx[Anonymized Customer]GtmConnection | Logistics | Trigger and invoke |
+| XxAtbDb | Database | Trigger and invoke |
+
+---
+
+### Integration Outline
+
+The following section explains the step - by- step process of integration:
+XxScmRTVErpToWms
+- Trigger_RTVTransaction: Create Return Transaction Event will be triggered.
+- Stitch_gvar: Assigned variable to.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationName',$self/ns1:metadata/ns1:integration/ns1:name, 'IntegrationCode', '') This value will be fetched from OIC lookup “XX[Anonymized Customer]ConstantLookup”. |
+| Var_CompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', 'DE_M05', 'WMS_Company_Code', '') This value will be fetched from OIC lookup ”XX[Anonymized Customer]WmsCompanyLookup”. |
+| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') This value will be fetched from OIC lookup ““XX[Anonymized Customer]ConstantLookup” which is used to send notification email from OIC service. |
+| Var_InstanceName | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'InstanceName', 'Value', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup” |
+
+---
+
+- Assign_gvar: Assign Variables
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationName',$self/ns1:metadata/ns1:integration/ns1:name, 'IntegrationCode', '') This value will be fetched from OIC lookup “XX[Anonymized Customer]ConstantLookup”. |
+| Var_CompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', 'DE_M05', 'WMS_Company_Code', '') This value will be fetched from OIC lookup ”XX[Anonymized Customer]WmsCompanyLookup”. |
+| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') This value will be fetched from OIC lookup ““XX[Anonymized Customer]ConstantLookup” which is used to send notification email from OIC service. |
+| Var_InstanceName | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'InstanceName', 'Value', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup” |
+
+---
+
+- ForEachTrxType:
+Repeating element
+/ns22:onEvent/inp1:findTransactionResponse/inp1:result
+Current element name *
+CurrentTrxType 
+
+SwitchCase: If TransactionType is Return To Vendor then the below flow will be executed.
+- InvokeVendorDetailsBIPReport: It’s a call to BIP report to get Vendor details.
+- AssigbFileRefrernce: Report output will be decoded to base64.
+- StageFile: It will read the BIP output in .csv format.
+- Stage_writelgfdataXml: It will convert the data in xml format.
+- InvokeWMSRestAPI: It will invoke WMS init_stage_interface API.
+- ErrorHandling: If API response is success, the success email will be triggered; else the error notification will be triggered with reason.
+ERP Request and Response Schemas:
+
+---
+**Table:**
+
+| WMS Request |  |
+| WMS Response |  |
+
+---
+
+Sample WMS Transmission Response:
+
+---
+**Table:**
+
+| Transmission Response | Response Message |
+| SUCCESS | <HTTPHeaders/> <ConnectivityProperties xmlns="http://xmlns.oracle.com/cloud/adapter/connectivityproperties/REST/trigger_RTVTransaction"> <RestAPI> <http.response.status>200</http.response.status> <http.response.reason>OK</http.response.reason> <http.target.endpoint.uri>https://tb10.wms.ocs.oraclecloud.com/[Anonymized Customer]_test/wms/api/init_stage_interface/</http.target.endpoint.uri> </RestAPI> </ConnectivityProperties> </executeResponse> |
+| ERROR | http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.1 Bad Request 400 <![CDATA[InboundJaxrsResponse{context=ClientResponse{method=POST, uri=https://tb10.wms.ocs.oraclecloud.com/[Anonymized Customer]_test/wms/api/init_stage_interface/, status=400, reason=Bad Request}}]]> <![CDATA[<?xml version="1.0" encoding="utf-8"?> <root> <success>False</success> <response> <message>Processing failed for entity movement_request and file group 2023-04-18T09:35:22.895Z_20230418053524195</message> <errors> <error> <key>191</key> <msg>Sequence Number Mismatch for item alternate code EPP003436</msg> </error> </errors> </response> </root>. A 400 Bad Request Error indicates that the target service is unable (or refuses) to process the request sent by the client (Oracle Integration Cloud), due to an issue that is perceived by the server to be a client problem. You can trace the cURL representation of the request sent to the target service from the Oracle Integration Cloud server logs. Try invoking the target service using cURL. It may also be that one of the intermediaries (proxy, LBR) could be returning this code. ]]></error> |
+
+---
+
+- Notify: Once the data is posted into GTM side and all the operations in Integration are completed normal then success email notification will be sent to respective team through “XxCommonNotificationHandler”.
+With map activity, process will map the below values to common error handler Integration.
+
+---
+**Table:**
+
+| Request Parameters | Values |
+| IntegrationCode | $self/nsmpr0:metadata/nsmpr0:integration/nsmpr0:identifier |
+| IntegrationID | $self/nsmpr0:metadata/nsmpr0:integration/nsmpr0:name |
+| InstanceID | $self/nsmpr0:metadata/nsmpr0:runtime/nsmpr0:instanceId |
+| EmailFrom | $EmailFrom |
+| EmailTo | $GetLocalVariable/nsmpr1:GETResponse/nsmpr1:components.schemas.response-wrapper/ns38:SuccessNotify |
+| EmailSub | Shipment From WMS to |
+| Logging | 'Y' |
+
+---
+
+Local integration “XxCommonNotificationHandler” will be triggered based on above mentioned values in map activity and will send Notification email to concern team.
+
+### Main Flow Code Snippet
+
+Figure: Main flow code snippet
+
+### Global Fault
+
+- The global fault handler is responsible for the whole execution scope and process the exceptions occurred in the individual stages.
+- InvokeErrorHandler:
+- The global fault handler will invoke the local integration “XxCommonNotificationHandler” which captures the error occurred at any step in overall integration flow and notify it over the email.
+- Using the map activity “Map to InvokeCommonErrorHandler”, process would map the below

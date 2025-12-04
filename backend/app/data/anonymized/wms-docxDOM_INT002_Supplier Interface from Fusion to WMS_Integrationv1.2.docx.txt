@@ -1,0 +1,373 @@
+**Table:**
+
+| Business / Technical Brief |
+| [Anonymized Customer]-INT002 – Supplier Integration from Fusion to WMS 23rd  May 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 22-May-2024 | Amit Sharma | 1a | Initial Version |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | reviewer | role |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+This Design Specification documents the detailed design for Supplier Interface from Fusion to Oracle Cloud WMS.
+This document describes the functional design of the list of attributes which need to be interfaced from Fusion to Cloud WMS through Oracle Integrated Cloud Service (OIC) to create suppliers in WMS. The design document also covers the event attribute mappings from Fusion to Oracle Cloud WMS Functional Columns.
+
+## Overview and Scope
+
+Overview
+For creating PO receipts, supplier data is required in Cloud WMS System. Since suppliers would be created directly in Fusion and synchronization service will need to send the create/ update information to Cloud WMS.
+Business Purpose
+All Purchasing transactions will be recorded in Oracle Cloud ERP, however the warehouse activities will be carried out for all the manufacturing facilities (inventory organization enabled in WMS) using Cloud WMS. Both the systems need to communicate to complete the Receiving part of the Procure to Pay cycle for every single procurement transaction. Requisitions, Purchase orders will be primarily recorded in Oracle Procurement Cloud. Actual Receipts would be recorded in Cloud WMS upon receiving the Receipt Advice. However, to enable this receiving part of the procure to pay cycle, supplier data in Cloud WMS needs to be in sync with Fusion. WMS will be the material transaction system and Fusion will be the operational system (system of records). Hence, a specific interface needs to be built between Fusion and Cloud WMS as per the Business Requirement to keep Supplier data in sync between the two systems.
+This design document focuses on building an interface between Fusion and Cloud WMS so that Supplier data can be kept in sync.
+Scope
+The scope of this document is limited to functional and technical design of the interface to communicate Supplier master data additions and updates from Fusion to Cloud WMS System.
+Functional Overview
+The Vendor/Supplier in WMS needs the following inputs to manage inbound orders.  To process the incoming purchase orders, the WMS module should receive the following required inputs from Fusion Purchasing ERP:
+Company Code
+Vendor Name
+Address Line1 of Supplier Site
+Address Line2 of Supplier Site
+Address Line3 of Supplier Site
+City of Supplier Site
+State of Supplier State
+Zip Code of supplier Site
+Country of Supplier Site
+Phone Number of Supplier Site
+Email address of Supplier site
+Contact of Supplier Site
+By integrating Oracle Fusion Purchasing ERP to WMS, all the vendors and associated details, as listed above, is expected to flow seamlessly into WMS, which will help in processing the inbound purchase orders accurately.
+Suppliers are created and approved in Fusion, as soon they are approved, suppliers are interfaced to WMS by a scheduled process in OIC.
+Allows for below transactions:
+Create
+Update (any change made to the mapping column in Fusion is updated in WMS)
+
+# Business Objectives
+
+The following objectives were captured during the Focus Stage and are addressed by the functional designs described in this document:
+
+---
+**Table:**
+
+| Integration ID | Category | Short description |
+| INT002 | Fusion Purchasing ERP to Vendor master in WMS | Creation of Vendor details in Warehouse management system cloud. |
+
+---
+
+# Mapping
+
+# Pre-Conditions
+
+- Oracle Fusion Purchasing ERP and destination systems (WMS) should already contain synchronised and aligned vendor masters as a part of the Vendor Master Data migration.
+- New Vendor, Change Vendor and Inactive Vendors are taken care of during integration.
+- Business Units against which vendors are created should exist in WMS.
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
+| PO Interface Failure to WMS due to missing item in WMS | 5 | 2 | Valid error message stating the integration failure. Re-run the item integration first and then the PO receipt advice integration |
+| PO interfaced to WMS with supplier details missing | 2 | 2 | Re-run the supplier integration first and then the PO receipt advice integration |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | comments |
+|  |  | No dependency since it is a master data integration |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Comments |
+| Xx_INT002_SUPPLIERS_EXTRACT_ESS_JOB | Scheduled in OIC: Every 1 Hour |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Business Use Case:
+
+- New Vendor/Supplier Creation in Fusion and interface to WMS
+- Vendor update in Fusion and interface to WMS
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | open item | data required/Owner | status | impact if not closed |
+| 001 | What is the supplier data volume for [Anonymized Customer] (during cutover and business as usual)? | [Anonymized Customer] |  |  |
+| 002 | How to handle multiple sites and assignment to [Anonymized Customer] BUs | OC/[Anonymized Customer] |  |  |
+| 003 |  |  |  |  |
+
+---
+
+# Technical Overview
+
+### Scope
+
+The objective of this section is to provide [Anonymized Customer] with a Technical Specification for Outbound Integration to publish Suppliers from Fusion to WMS.
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| ERP | Enterprise Resource Planning |
+| SCM | Supply Chain Management |
+| OIC | Oracle integration cloud |
+| API | Application Programming Interface |
+| SaaS | Software as a service |
+| PaaS | Platform as a Service |
+| BI Publisher | Business Intelligence Publisher |
+| UCM | Universal Content Management |
+| WMS | Warehouse Management System |
+| ESS | Oracle Enterprise Scheduler |
+| REST | Representational State Transfer |
+| XML | Extensible Markup Language |
+| XSD | XML Schema Definition |
+| URL | Uniform Resource Locator |
+| CSV | Comma-Separated Values |
+| ICS | Oracle Integration Cloud Service |
+| HTTP | Hypertext Transfer Protocol |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File location |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+---
+**Table:**
+
+| Description | File |
+| Data Mapping Template for Fusion to WMS |  |
+| Sample BIP Report output file |  |
+
+---
+
+### Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Volume |
+| Batch | Every 1 hour Time Zone: (UTC+01:00) Berlin - Central European Time | Depends on the Suppliers created/modified in the last 24 hours by users |
+
+---
+
+### Assumptions
+
+- Mapping between Business Units in SCM Cloud and WMS Company needs to be setup for this integration to extract data.
+- The integration excludes the possibility to delete a Supplier from WMS Cloud. It only covers create and update operation.
+- In case, if no records are extracted during the current schedule period. The integration will end normal.
+- In case of any success/error in the integration, a notification email will be sent to the mail list configured in the OIC lookup.
+
+### High Level Approach
+
+- The Supplier bulk Export “XxPublishSupplierErpToWms” integration will be a scheduled integration which will trigger the custom ESS job. “Xx_INT002_SUPPLIERS_EXTRACT_ESS_JOB” and the ESS Job is scheduled to run once in day.
+- Supplier details are extracted from SCM Cloud (SaaS) using the BI Publisher tool.
+- The extracted Supplier records data file is placed in UCM.
+- The extracted Supplier information will be interfaced to WMS cloud using WMS “InitStageInterfaceAPI” service.
+
+### Pre-Requisites
+
+Send Email Integration “XxCommonNotificationHandler” should be deployed in the OIC.
+Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
+Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+Lookup “XXDominoWmsCompanyLookup” should be present to transform Fusion BU with WMS Company Code.
+
+# Integration Analysis – XxPublishSupplierErpToWms
+
+This Integration component is responsible to export Suppliers from Fusion ERP to WMS system.
+
+### Integration Components
+
+Below are the required components for this integration.
+
+---
+**Table:**
+
+| Integration Name | Integration Pattern | Package Name | Lookup Name |
+| XxPublishSupplierErpToWms | Scheduled Orchestration |  | XXDominoCommonLookup, XxDominoConstantLookup, XXDominoWmsCompanyLookup |
+| XxPublishSupplierErpToWmsCallback | App Driven Orchestration |  | XXDominoCommonLookup, XxDominoConstantLookup, XXDominoWmsCompanyLookup |
+
+---
+
+### Required Connections
+
+---
+**Table:**
+
+| Connection Name | Connection Type | Connection Role |
+| XxDominoErpCloudConnection_WMSINT | Oracle ERP Cloud | Trigger and invoke |
+| XxDominoWMSConnection | Oracle WMS Cloud | Trigger and invoke |
+| XxAtpDb | Oracle ATP | Trigger and invoke |
+
+---
+
+### Integration Outline
+
+Figure: Architecture Diagram
+The Following section explains the step – by- step process to publish Suppliers from Fusion to WMS:
+- Integration – XxPublishSupplierErpToWms
+- Schedule Parameters: The integration has two schedule parameters which are as below, the integration will be triggered with those values assigned to these parameters.
+
+---
+**Table:**
+
+| Parameter name | Data type | Value |
+| FromLastUpdateDate | Date | The value of “Start_time” from last successful run of the integration will be assigned to this parameter. |
+| CompanyCode | String | Value for this parameter will be assigned through CompanyCode, which is maintained in OIC lookup. Note:  CompanyCode details provided below in AssignLocalVariables section. |
+
+---
+
+- AssignGlobalVar: The Global variable will be the Integration code which will be fetched from lookup “XXDominoCommonLookup” maintained in OIC. With reference to this lookup, all other local variables will be fetched which are as below:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', 'XXPUBLISHSUPPLIERERPTOWMS', 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+
+---
+
+- AssignLocalVariables:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| JobName | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', $IntegrationCode, 'Job_Name', '') “Xx_INT002_SUPPLIERS_EXTRACT_ESS_JOB” - This value will be fetched from OIC common lookup based on the value of Integrationcode from AssignGlobalVar. |
+| CompanyCode | String | dvm:lookupValue('XXDominoWmsCompanyLookup','Fusion_Bu_Name', $CompanyCode, 'WMS_Company_Code', '') Value of variable will be fetched from OIC Lookup “XXDominoWmsCompanyLookup” based on Fusion BU WMS Company Code and Org mapping. |
+
+---
+
+- CheckIntegrationDetails: This step will invoke the Oracle ATP DB connection to store the integration run details into custom table – “XXDOM_INT_LAST_RUN_DATE_T” which is a common table to store all the integration run details.
+For the 1st ever run of integration the records will be inserted into ATP table and from next run onwards it will check if the record with the integration name is present and will update the record with required information as mentioned below.
+- Insert operation:
+The below details will be inserted into stage table for 1st ever run of the integrations.
+Table Name – “XXDOM_INT_LAST_RUN_DATE_T”
+
+---
+**Table:**
+
+| Table Column | Value |
+| RECORD_ID | batch_record_id_seq.nextval |
+| INTEGRATION_NAME | $IntegrationCode |
+| PARENT_INSTANCE_ID | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:instanceId |
+| CALLBACK_INSTANCE_ID | NULL |
+| INT_RUNNING_FLAG | Y |
+| BATCH_COMPLETION_FLAG | Y |
+| LAST_RUN_DATE | sysdate |
+| CREATED_BY | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:invokedBy |
+| CREATION_DATE | sysdate |
+| LAST_UPDATED_DATE | sysdate |
+| LAST_UPDATED_BY | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:invokedBy |
+
+---
+
+- Update Operation:
+The below details will get updated for Update operation for further runs of integration.
+Table Name – “XXDOM_INT_LAST_RUN_DATE_T”
+
+---
+**Table:**
+
+| Table Column | Value |
+| PARENT_INSTANCE_ID | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:instanceId |
+| INT_RUNNING_FLAG | Y |
+| BATCH_COMPLETION_FLAG | N |
+| LAST_UPDATED_DATE | sysdate |
+| LAST_UPDATED_BY | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:invokedBy |
+
+---
+
+- ExportSuppliersReportData:
+This step will fetch Supplier records from fusion which are created and updated based on the last execution run date by submitting the ESS job. The value of LAST_RUN_DATE from table XXDOM_INT_LAST_RUN_DATE_T will be assigned to ESS job parameter to fetch the records.
+The value of Last Run date will get updated in stage table as mentioned above. After every successful completion of entire process and in next run the updated value will be passed to ESS job parameter. In case process completes in error, the value of LAST_RUN_DATE will not be updated, and same current value will be passed for next run of the integration.
+In case of Ad-Hoc run, the value of “FromLastUpdateDate” variable mentioned in schedule parameter tab (in Step 1) will be passed by user and once process is completed the value of “FromLastUpdateDate” will be updated to “NULL”.
+- Integration – XxPublishSupplierErpToWmsCallback
+- ERPCallBack: This is oracle ERP cloud adapter connection which will subscribe to the ESS job event submitted by the above integration Point A.
+- Trigger Purpose: Receive Business Events raised within ERP Cloud.
+- Business Event for Subscription: ERP Integration Outbound Event.
+- Event Description - This event notifies that export bulk data is completed via ERP Integration web service.
+- AssignGlobalVar: The Global variable will be the Integration code which will be fetched from lookup – “XXDominoCommonLookup” maintained in OIC. With reference to this lookup, all other local variables will be fetched which are as below-
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', 'XXPUBLISHSUPPLIERERPTOWMS', 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. |
+
+---
+
+- AssignLocalVariables:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationID | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', $IntegrationCode, 'RiceID', '') “INT002” – This value will be fetched from OIC common lookup based on the value of Integration code from AssignGlobalVar Source value. |
+| OICTempFileLocation | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', $IntegrationCode, 'TempFileLocation', '') Default Value – “/Integration/Suppliers/Reports” - This will be the temporarily path to locate the path while reading, listing the .csv files from UCM upload through ESS job. |
+| ErrNotifyEmail | String | dvm:lookupValue('XXDominoCommon

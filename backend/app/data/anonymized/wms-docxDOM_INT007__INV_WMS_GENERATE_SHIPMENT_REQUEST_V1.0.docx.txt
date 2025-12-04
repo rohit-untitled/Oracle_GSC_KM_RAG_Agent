@@ -1,0 +1,352 @@
+**Table:**
+
+| Business / Technical Brief |
+| [Anonymized Customer]-INT007 INV WMS Generate Shipment Request 13th Jun 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 13-Jun-2024 | Harshal Tiwari | 1a | Initial Version |
+| 25-Jun-2024 | Akanksha Sachan | 1b | Updated with technical details |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | reviewer | role |
+| 26-Jun-2024 | Rakesh Mishra | Technical Lead |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+The objective of this document is to provide a Design Specification to:
+Provide the necessary information with enough detail so that the Project team, have a clear understanding of the design and functional requirements.
+
+## Scope
+
+This document specifies the business context, functional requirements, and details to integrate Oracle Fusion to Oracle Cloud WMS for Sales Order Shipping Process.
+A warehouse management system (or WMS) is a software application designed to support warehouse or distribution center management and staff. They facilitate management of available resources to move and store materials into, within, and out of a warehouse, while supporting staff in material movement and storage.
+Coordinating the communication with these systems to support purchase order receipts, returns to vendors, internal material transfers, inventory transactions, and sales order shipments is a substantial integration effort.
+Inventory Management Cloud supports a central integration framework across Oracle Procurement Cloud, Oracle Order Management Cloud, and Oracle Inventory Management based on web services to support the interactions between WMS and Fusion Cloud.
+Using these services, Inventory Management Cloud communicates Sales Order shipment request to Oracle Cloud WMS for processing.
+
+## Functional Overview
+
+[Anonymized Customer] business process flow requires the Sales Order to be created and configured in Order Management system. Once the Sales Order is created it should be interfaced to the WMS for the further processing. The Sales Order integration between Fusion and WMS will run every 10 Minutes and pick all the sales order lines which are Awaiting Shipment and are not already interfaced to WMS.
+
+# Business Objectives
+
+When integrating Oracle Inventory Management Cloud with a warehouse management system (or WMS), there is a requirement to send the sales order created in Fusion to WMS so that further processes can be performed in WMS system to ship the Sales Order.
+Business Flow:
+The above picture depicts the process flow as per business requirement. The sales order is created and configured in Fusion Order Management. The Sales Order line(s) goes to GTM for trade screening once the order is successfully screened then manufacturing work order is created for the configured item(s). After completion of the Work order the Sales Order lines Wait for Shipment. At this moment an integration will trigger between Fusion Inv and WMS to interface the Sales Order lines to WMS.
+The above picture depicts the general steps in the Sales order business flow. The steps initiate in Fusion Order Management with the creation of a Sales Order. This sales order gets interfaced to WMS via OIC integration to create an Outbound Order. WMS allocates the order and ship it. The shipment details are then interfaced back to Fusion to update the shipment information, decrement the inventory quantities in stock and to update the sales order status.
+Each Shipping line will create a separate Order in WMS. The Sales Order Number column will reference the Fusion order with an additional sequence number except for the shipset orders. Shipset orders will have multiple order lines for the same order. The orders will be interfaced to WMS with a Delivery ID. The delivery ID is generated based on the shipping method, ship to country, scheduled ship date and the customer party site number.
+
+## Process Overview
+
+- Create the Sales Order with the Configured item.
+- Sales Order lines reach to Awaiting Shipping.
+- Generate Shipment Request ESS job runs.
+- All the Sales Order lines which are not already interfaced will be interfaced to WMS (INT007.)
+- A new WMS Sales Order will be created based on the data provided by Fusion.
+
+# Pre-Conditions
+
+- Shipment line should not be already interfaced to WMS.
+- Shipment line should be in the Awaiting Shipping status.
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | comments |
+| WMS Items (INT001) |  | Items should be interfaced to WMS from Fusion PDH |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Data volume |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | open item | data required | status | impact if not closed |
+| 001 |  |  |  |  |
+| 002 |  |  |  |  |
+| 003 |  |  |  |  |
+| 004 |  |  |  |  |
+| 005 |  |  |  |  |
+| 006 |  |  |  |  |
+| 007 |  |  |  |  |
+
+---
+
+# Business Use Case:
+
+- Create Sales Order in Fusion and send to WMS.
+
+# Technical Overview
+
+### Scope
+
+The objective of this document is to provide [Anonymized Customer] with a Technical Specification for Outbound Integration for Generate Shipment Request from ERP to WMS.
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| ERP | Enterprise Resource Planning |
+| SCM | Supply Chain Management |
+| OIC | Oracle integration cloud |
+| API | Application Programming Interface |
+| SaaS | Software as a service |
+| PaaS | Platform as a Service |
+| BI Publisher | Business Intelligence Publisher |
+| UCM | Universal Content Management |
+| WMS | Warehouse Management System |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File location |
+| 1 |  |  |
+| 2 |  |  |
+| 3 |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+---
+**Table:**
+
+| Description | File |
+| Data Mapping Template for Fusion to WMS for SO creation |  |
+| Data Mapping Template for Fusion to WMS for DeliveryID creation logic |  |
+| Sample WMS XML Payload |  |
+| Sample DeliveryId WMS XML Payload |  |
+
+---
+
+### Frequency
+
+This is event-based integration, as soon as the “Generate Shipment Requests” is raised in Fusion ERP the integration will be triggered in OIC.
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Volume |
+| Batch | Planned as daily with Ad Hoc option | Depends on the sales orders created in the last 24 hours by users |
+
+---
+
+### Assumptions
+
+- This interface between SCM and WMS Cloud for shipment requests covers Sales Orders with no previously reserved lines, sales orders with existing reservations on specific lots (aka de-stocking orders) and transfer orders.
+- This integration does not cover “Return Transfer Orders”, which correspond to shipments needed because of material received from other organizations or facilities through a Transfer Order that now needs to be returned.
+- This integration will not take in consideration lines which have been manually assigned to a Shipment in SCM Cloud. It is WMS role to execute shipments so shipments should not be created in SCM Cloud for WMS controlled organizations.
+- This integration will take in consideration lines for inventory items only. Orders for services or recurring charges, etc. which do not use inventory items will not be taken in consideration.
+- Draft sales orders and sales order revisions are not taken in consideration.
+- In general, the integration will depend on Release Rules defined in Inventory. What is excluded from the Release Rule will not be considered. However, it is possible to have one or more schedules of “Generate Shipment Requests” using different Release Rules.
+- The “Generate Shipment Request” program will be scheduled, so it should not be submitted manually by user unless in case of urgency (e.g. missing orders, wrong orders, urgent shipment requests, etc.).
+
+### High Level Approach
+
+- The integration will trigger once the ESS job – “Generate Shipment Request” is submitted. Integration will be subscribing to the event for “Generate Shipment Request”.
+- “Generate Shipment Request” job will be scheduled in fusion as per frequency decided to extract the sales order details created after the last successful run of job.
+- Integration will be triggered by subscribing the event Business event ‘Generate Shipment Requests’ is applied in the source ERP adapter responsible for the invocation of OIC integration.
+- The payload received from contains from SCM will contains the shipment order details and shipment line details.
+- The payload will be then converted into WMS XML required format using stage Write operation which will do the XML transformation internally.
+- The transformed XML data will be interfaced to WMS cloud using WMS InitStageInterfaceAPI service.
+
+### Pre-Requisites
+
+Send email and SMS integration “XxCommonNotificationHandler” should be deployed in the OIC.
+Lookup “XX[Anonymized Customer]CommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ErrNotifyEmail Address in OIC.
+Lookup “Xx[Anonymized Customer]ConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+“XxScmShipmentRequestErpToWms”, “XxScmShipmentRequestProcessErpToWms” should be deployed in OIC.
+" XxParkingLotProducer(1.0)" should be deployed in OIC.
+Integration Analysis – XxScmShipmentRequestErpToWms, XxScmShipmentRequestProcessErpToWms
+This Integration component is responsible for sending shipment request from Fusion ERP to WMS system.
+
+### Integration Components
+
+Below are the required components for this integration.
+
+---
+**Table:**
+
+| Integration Name | Integration Pattern | Package Name | Lookup Name |
+| XxScmShipmentRequestErpToWms | App Driven Orchestration |  | XX[Anonymized Customer]CommonLookup, Xx[Anonymized Customer]ConstantLookup |
+| XxScmShipmentRequestProcessErpToWms | App Driven Orchestration |  | XX[Anonymized Customer]CommonLookup, Xx[Anonymized Customer]ConstantLookup, XX[Anonymized Customer]WmsCompanyLookup |
+
+---
+
+### Required Connections
+
+---
+**Table:**
+
+| Connection Name | Connection Type | Connection Role |
+| Xx[Anonymized Customer]ErpCloudConnection | Oracle ERP Cloud | Trigger and invoke |
+| XX[Anonymized Customer]ERPRestInvoke | Oracle REST | Invoke |
+| XxOicRestTrigger | Oracle REST | Trigger |
+| XxAtpDb | Oracle ATP | Trigger and invoke |
+| Xx[Anonymized Customer]BIReportConnection | SOAP | Invoke |
+| Xx[Anonymized Customer]WMSConnection | Oracle WMS Cloud | Trigger and invoke |
+| XxDominolgfDataInvoke | Oracle Rest API | Trigger and invoke |
+
+---
+
+### Integration Outline
+
+Figure 1: Architecture Diagram
+The Following section explains the step – by- step process of sending shipment request from ERP to WMS system.
+- Integration: XxScmShipmentRequestErpToWms
+- ShipmentRequestEventListner: This is oracle ERP cloud adapter connection which will subscribe to the ESS job event submitted in fusion to create shipment request.
+- Trigger Purpose: Receive Business Events raised within ERP Cloud.
+- Business Event for Subscription: Generate Shipment Requests.
+- Event Description - This event signals that shipment line selection criteria is published for external systems to process the lines
+ESS Job Details:
+
+---
+**Table:**
+
+| ESS Job Name | Frequency | Parameter |
+| Generate Shipment Requests | This job will be scheduled on agreed frequency with Ad hoc option | Parameter Name -Release value. The release rule will be defined in fusion, Job will extract only those records which are coming under the Release rule value. |
+
+---
+
+- AssignVariable: In this step, below variable is being initialized:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| offSet | Integer | Integer(0) |
+
+---
+
+- GetShipmentLines: This is a REST API connection, where we are fetching shipment line.
+Map Activity GetShipmentLines: In this step, Shipment Line would be mapped to query parameter.
+- WriteJsonPayload: This is a stage write action. In this step, fusion payload is being captured and stored in temp file.
+Map Activity WriteJsonPayload: In this map activity, we are mapping fields of fusion payload with temp file.
+- ReadJsonPayload: This is a stage read action. In this step, fusion payload stored in temp file is being read.
+- InvokeParkingLotProducer: In this step, integration XxParkingLotProducer(1.0) is being invoked.
+Map Activity InvokeParkingLotProducer: In this map activity, parking lot fields are being mapped.
+Figure 2: Main flow code snippet
+
+### Global Fault
+
+- The global fault handler is responsible for the whole execution scope and processes the exceptions occurred in the individual stages.
+- AssignGlobalVariable: The Global variable will be the Integration code which will be fetched from maintained lookup “XX[Anonymized Customer]CommonLookup” with the reference of this lookup all Error variable values will fetch which are given below.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup','IntegrationCode',  XXSCMSHIPMENTREQUESTERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XX[Anonymized Customer]CommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+
+---
+
+- AssignErrorvariable:
+- Using assign activity, variables will be declared to map the values required for invoking common error handler integration.
+
+---
+**Table:**
+
+| Variable | Values |
+| IntegrationID | dvm:lookupValue('XX[Anonymized Customer]CommonLookup','IntegrationCode', $IntegrationCode, 'RiceID', '')  This value will fetch from common lookup- XX[Anonymized Customer]CommonLookup with the reference of integration code value from Global variable. |
+| ErrNotifyEmail | dvm:lookupValue('XX[Anonymized Customer]CommonLookup','IntegrationCode', $IntegrationCode, 'FailureNotify', '')  This value will fetch from common lookup- XX[Anonymized Customer]CommonLookup with the reference of integration code value from Global variable.It will be failure notify email id. |
+| EmailFrom | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '')  This value will be fetched from constant lookup-Xx[Anonymized Customer]ConstantLookup |
+
+---
+
+- InvokeCommonErrorHandler:
+- The global fault handler will invoke the local integration “XxCommonNotificationHandler” which captures the error occurred any step in overall integration flow and notify over email.
+- Using the map activity “Map to InvokeCommonErrorHandler, process would map the below values required for XxCommonNotificationHandler.
+
+---
+**Table:**
+
+| Request Parameters | Values |
+| IntegrationCode | $IntegrationCode |
+| IntegrationID | $IntegationID |
+| InstanceId | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:instanceId |
+| ErrorCode | $GlobalFaultObject/nsmpr0:fault/nsmpr0:errorCode |
+| ErrMsg | $GlobalFaultObject/nsmpr0:fault/nsmpr0:reason |
+| EmailFrom | $EmailFrom |
+| ErrNotifyEmail | $ErrNotifyEmail |
+| EmailSub | concat (dvm:lookupValue ("Xx[Anonymized Customer]ConstantLookup", "ID", "InstanceName", "Value", "" ), " - ", "ERROR", " - ", dvm:lookupValue ("XX[Anonymized Customer]CommonLookup", "IntegrationCode", $IntegrationCode, "IntegrationDesc", "" ), " - ", $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:instanceId ) |
+| Logging | Y |
+
+---
+
+Figure 3:  GlobaFlault code snippet
+- Integration: XxScmShipmentRequestProcessErpToWms
+- Main: This is a trigger step to trigger the integration.
+- AssignGlobal

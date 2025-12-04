@@ -1,0 +1,102 @@
+Document Control
+Document History
+
+---
+**Table:**
+
+| Version | Date | Author | Summary of Changes | Summary of Changes |
+| 1.0 | 10-Nov-20 | Ashish Chinchulkar | Initial version |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+Reviewed By
+
+---
+**Table:**
+
+| Reviewer | Date | Role / Responsibility |
+| Jacob Cherian |  | Tech Lead |
+|  |  |  |
+
+---
+
+Table of Contents
+1	Introduction	4
+1.1	References	4
+2	Instructions	5
+2.1	Pre-modification Steps	5
+2.2	Modify PaaS application integration	5
+3	Open and Closed Issues	9
+3.1	Open Issues	9
+3.2	Closed Issues	9
+
+# Introduction
+
+The purpose of this document is to:
+Describe the steps to modify integrated PaaS application in fusion.
+
+## References
+
+The content of this document is to be referenced along with the following reference documents to get a complete technical picture of this object.
+Table 1-1 References
+
+---
+**Table:**
+
+| Name | Description | Version |
+| [Anonymized Customer] | Technical Design Document | 1.0 |
+| [Anonymized Customer] | Installation document | 1.0 |
+
+---
+
+# Instructions
+
+## Pre-modification Steps
+
+Refer “[Anonymized Customer]” to integrate PaaS (VBCS) application in SaaS.
+
+## Modify PaaS application integration
+
+- Login to Fusion
+- In home page, on top right hand side click on UserName icon and select “Setup and Maintenance” item from drop down menu.
+- Then select “Manage Setup content” task from Task List available on right hand side of page.
+- Then select “Manage Integration of Additional Application”.
+- It will navigate to “Manage Integration of Additional Application” page. In this page select  “[Anonymized Customer]” application and click on edit option.
+- In edit Application Integration page, replace existing Full URL with new one.
+In our case the existing URL is referring to PROD environment which is below
+https://[Anonymized Customer]-oraclecloudinteg.integration.ocp.oraclecloud.com/ic/builder/rt/[Anonymized Customer]/live
+- Replace PROD URL with DEV1 URL which is as follows.
+https://[Anonymized Customer]-oraclecloudinteg.integration.ocp.oraclecloud.com/ic/builder/rt/[Anonymized Customer]/live
+Note:
+For UAT use the OIC UAT URL respectively
+https://[Anonymized Customer]-oraclecloudinteg.integration.ocp.oraclecloud.com
+- After replacing URL click on Apply button and then click on Save and Close button.
+
+# Open and Closed Issues
+
+## Open Issues
+
+---
+**Table:**
+
+| ID | Issue | Resolution | Status | Responsibility | Target Date | Impact Date |
+|  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |
+|  |  |  |  |  |  |  |
+
+---
+
+## Closed Issues
+
+---
+**Table:**
+
+| ID | Issue | Status | Responsibility | Resolution |
+|  |  |  |  |  |
+|  |  |  |  |  |
+|  |  |  |  |  |
+
+---

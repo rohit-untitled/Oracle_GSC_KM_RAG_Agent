@@ -1,0 +1,346 @@
+**Table:**
+
+| Business / Technical Brief |
+| [Anonymized Customer]-INT005– INV WMS Receipt Advice -RMA 27th May 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 22-May-2024 | Amit Sharma | 1a | Initial Version |
+| 28-Jun-2024 | Guna and Iqbal | 1a | Review and Amended the Cross functional points from OM perspective |
+| 06-June-2024 | Akanksha Sachan | 1b | Technical Design Update |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | reviewer | role |
+| 15-06-2024 | Rakesh Mishra | Technical Lead |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+The objective of this document is to provide a Design Specification to:
+Provide the necessary information with enough detail so that the Project team, have a clear understanding of the design and functional requirements.
+
+## Scope
+
+This document specifies the business context, functional requirements, and details to integrate Oracle Fusion to Oracle Cloud WMS for Return Material Authorization Orders interfaced as ASNs with the ASN type as “RMA”.
+A warehouse management system (or WMS) is a software application designed to support warehouse or distribution center management and staff. They facilitate management of available resources to move and store materials into, within, and out of a warehouse, while supporting staff in material movement and storage.
+Coordinating the communication with these systems to support purchase order receipts, returns to vendors, internal material transfers, inventory transactions, and sales order shipments is a substantial integration effort.
+Inventory Management Cloud supports a central integration framework across Oracle Procurement Cloud, Oracle Order Management Cloud, and Oracle Inventory Management based on web services to support the interactions between WMS and Fusion Cloud.
+Using these services, Inventory Management Cloud communicates Receipt Advice to Oracle Cloud WMS for processing.
+
+## Functional Overview
+
+[Anonymized Customer] process flow requires the Return Order to initiated in Order Management system to facilitate the return of physical product from [Anonymized Customer] in pre-defined facility. The return order is created as source document in order management. Warehouse person will Generate Receipt Advice from Inventory to WMS for further execution of returns. The sourcing details such as item number, return quantity, return order, and return to warehouse etc. are get published to WMS.
+Allows for below transactions:
+- Creation
+
+# Business Objectives
+
+When integrating Oracle Inventory Management Cloud with a warehouse management system (or WMS), there is the requirement to send the RMA information as Receipt Advice to allow the Receiving Inventory Organization in WMS to Receive and Put away the RMA stock.
+RMA Business Flow:
+The above picture depicts the general steps in the Return Material Authorization (RMA) business flow. The steps initiate in Fusion Order Management with the creation of the RMA. This RMA is then interfaced to WMS via OIC integration to create an Inbound Shipment. In WMS the user receives the requested items and locates them into a put away location. The receipt information along with the put away are then interfaced back to Fusion to update the ASN and adjust the inventory stock quantities to reflect the received quantity.
+The Generate Receipt Advice from Inventory to WMS will push the RMAs to WMS for further execution in WMS. The details such as RMA (ASN) number, as item number, return quantity, return order, and return to warehouse etc. are get published to WMS.
+In WMS, warehouse employee is responsible in performing below operations:
+- Creation of Receipt
+- Put Away of material in specified return facility along with additional details of Locator/Serials/Lot if any.
+Once Put Away is performed in WMS, the item is physically returned into warehouse. An inventory person will now send receipt confirmation details (detailed put away material transaction) to Inventory and same is responsible in progressing the return sales order to Credit the [Anonymized Customer] or closure without credit.
+
+## Process Overview
+
+- Create RMA in Fusion Order Management.
+- Schedule the process in Oracle Inventory Management “Generate Receipt Advice”. The scheduled process Generate Receipt Advice publishes an event to notify the WMS that receipt advice is ready to be interfaced. The web service Send Receipt Advice provides the ability for the WMS to receive the actual receipt advice with the expected shipment lines for Return Material Authorization (RMAs).
+- After the WMS receives the receipt advice for RMA, an ASN gets created with details like [Anonymized Customer] Name, return quantity etc. from return order and performs receiving-related processes including receiving and put away.
+
+# Mapping
+
+# Pre-Conditions
+
+# The items should be interfaced to WMS from PDH (INT001)
+
+- Shipment Type as “RMA” should be created in WMS.
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
+| RMA Interface Failure to WMS due to missing item in WMS | 5 | 2 | Valid error message stating the integration failure. Re-run the item integration first and then the RMA receipt advice integration |
+| RMA Interface Failure to WMS due to missing shipment type in WMS | 2 | 2 | Configure the shipment type in WMS and then re-run the RMA receipt advice integration |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | comments |
+| WMS Items (INT001) |  | Items should be interfaced to WMS from Fusion PDH |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Data volume |
+| Batch | ESS ‘Generate Receipt Advice’ and  ‘Generate Changed Receipt Advice‘ job runs every 5 mins |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | open item | data required | status | impact if not closed |
+| 001 |  |  |  |  |
+| 002 |  |  |  |  |
+| 003 |  |  |  |  |
+| 004 |  |  |  |  |
+| 005 |  |  |  |  |
+| 006 |  |  |  |  |
+| 007 |  |  |  |  |
+
+---
+
+# Technical Overview
+
+### Scope
+
+The objective of this document is to provide [Anonymized Customer] with a Technical Specification for Outbound Integration for Publishing Return Material Authorization from Fusion to WMS.
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| RMA | Return Material Authorization |
+| ERP | Enterprise Resource Planning |
+| SCM | Supply Chain Management |
+| OIC | Oracle integration cloud |
+| API | Application Programming Interface |
+| SaaS | Software as a service |
+| PaaS | Platform as a Service |
+| UCM | Universal Content Management |
+| ESS | Enterprise Scheduler Service |
+| WMS | Warehouse Management System |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File location |
+| 1 |  |  |
+| 2 |  |  |
+| 3 |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+---
+**Table:**
+
+| Description | File |
+| Data Mapping Template for Fusion to WMS |  |
+| Sample WMS XML Payload |  |
+
+---
+
+### Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Volume |
+| Batch | Planned as daily with Ad Hoc option | Depends on the RMA orders created in the last 24 hours by users |
+
+---
+
+### Assumptions
+
+- Mapping between Sales Orders in SCM Cloud and WMS Facilities needs to be setup for this integration to extract data.
+- This integration will not take in consideration lines which have been manually assigned to a Shipment in SCM Cloud. It is WMS role to execute shipments so shipments should not be created in SCM Cloud for WMS controlled organizations.
+- This integration will take in consideration lines for inventory items only. Orders for services or recurring charges, etc. which do not use inventory items will not be taken in consideration.
+- Draft sales orders and sales order revisions are not taken in consideration.
+- In case of any success/error in the integration, a notification email will be sent to the mail list configured in the OIC lookup.
+
+### High Level Approach
+
+- The integration will trigger once the ESS job – “Generate Receipt Advice” is submitted. Integration will be subscribing to the event for “Receipt Advice Event Notification”.
+- “Generate Receipt Advice” job will be scheduled in fusion as per frequency decided to extract the sales order details created after the last successful run of job.
+- Integration will be triggered by subscribing the event Business event “Receipt Advice Event Notification” is applied in the source ERP adapter responsible for the invocation of OIC integration.
+- The payload received from contains from SCM will contains the RMA order details and shipment line details.
+- The payload will be then converted into WMS XML required format by invoking the Rest API echoLgfDataOrder which will do the XML transformation internally.
+- The transformed XML data will be interfaced to WMS cloud using WMS InitStageInterfaceAPI service.
+
+### Pre-Requisites
+
+Send email and SMS integration “XxCommonErrorHandler” should be deployed in the OIC.
+Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
+Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+XxScmReceiptRmaRequestErpToWms, XxScmReceiptRmaRequestProcessErpToWms should be deployed in OIC.
+" XxParkingLotProducer(1.0)" should be deployed in OIC.
+" XxGetLookupVariable(1.0)" should be deployed in OIC.
+BIP Report should be present in the path mentioned in XXDominoCommonLookup.
+
+# Integration Analysis – XxScmReceiptRmaRequestErpToWms, XxScmReceiptRmaRequestProcessErpToWms
+
+This Integration component is responsible for exporting items from Fusion ERP to WMS system.
+
+### Integration Components
+
+Below are the required components for this integration.
+
+---
+**Table:**
+
+| Integration Name | Integration Pattern | Package Name | Lookup Name |
+| XxScmReceiptRmaRequestErpToWms | App Driven Orchestration |  | XXDominoCommonLookup, XxDominoConstantLookup, XxParkingLotRetryConfigLookup |
+| XxScmReceiptRmaRequestProcessErpToWms | App Driven Orchestration |  | XXDominoCommonLookup, XxDominoConstantLookup, XxParkingLotRetryConfigLookup, XXDominoWmsCompanyLookup |
+
+---
+
+### Required Connections
+
+---
+**Table:**
+
+| Connection Name | Connection Type | Connection Role |
+| XxDominoErpCloudConnection_WMSINT | Oracle ERP Cloud | Trigger and invoke |
+| XxDominoWMSConnection | Oracle WMS Cloud | Trigger and invoke |
+| XxOicRestTrigger | REST | Trigger |
+| XxAtbDb | Oracle ATP | Trigger and invoke |
+| XxDominolgfDataInvoke | REST | Trigger and invoke |
+| XxDominoBIReportConnection_WMSINT | SOAP |  |
+
+---
+
+### Integration Outline
+
+Figure 1: Architecture Diagram
+The Following section explains the step – by- step process of publishing items from Fusion to WMS:
+- Integration – XxScmReceiptRmaRequestErpToWms
+- ESS Job Parameters: The ESS Job have three parameters which are as below, the integration will be triggered with those values assigned to these parameters.
+
+---
+**Table:**
+
+| Parameter name | Data type | Value |
+| Organization | String | Return to warehouse company code. |
+| Resend Receipt Advice | Boolean | No – First time publishing the event. Yes – Tries to re-publishing the event |
+| RMA | String | Specify Return Order number |
+| RMS Line | String | Specify lines from return order which need to be received. Ignore if all the eligible lines to be returned |
+
+---
+
+- Global Assignment: The Global variable will be the Integration code which will be fetched from maintained lookup –“XXDominoCommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', ' XXSCMRECEIPTRMAREQUESTERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+
+---
+
+- Local Assignment:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| CurrentPotentionalErrorMessage | String | 'Error while calling Echo LgfData Integration.' |
+| IntegrationID | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', $IntegrationCode, 'RiceID', '') |
+| EmailFrom | String | dvm:lookupValue('XxDominoConstantLookup', 'ID', 'FromEmailId', 'Value', '') |
+| ErrNotifyEmail | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', $IntegrationCode, 'FailureNotify', '') |
+| SucessNotifyEmail | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', $IntegrationCode, 'SuccessNotify', '') |
+
+---
+
+- Scope: Event Response
+- WriteStage: This is a stage write action. In this step, fusion payload is being captured and stored in temp file.
+Map Activity WriteStage: In this map activity, we are mapping fields of fusion payload with temp file.
+- StageRead: This is a stage read action. In this step, fusion payload stored in temp file is being read.
+- InvokeParkingLotProducer: In this step, integration XxParkingLotProducer(1.0) is being invoked.
+Map Activity InvokeParkingLotProducer: In this map activity, parking lot fields are being mapped.
+- Default Handler: This step is there to capture errors other than API errors.
+- InvokeErrorHandler: In fault handler section, process will call “XxCommonNotificationHandler” local integration, which is to capture the error occured, if there is any service exception occurred in ERP cloud will be handled in scope fault handler and Email Notification will be sent to concern team.
+Map Activity InvokeErrorHandler: Error details to be mapped in this map activity.
+Figure2. Main Code Flow Snippet
+Figure 3. Scope Fault Handler
+- Integration -XxScmReceiptRmaRequestProcessErpToWms
+- Main: This is a trigger step to trigger the integration.
+- GlobalVariabledef: The Global variable will be the Integration code which will be fetched from maintained lookup – “XXDominoCommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', ' XXSCMRECEIPTRMAREQUESTPROCESSERP, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+| varRMANumber | String | ‘’ |
+
+---
+
+- GetVariables: This step will invoke integration ‘XxGetLookupVariable(1.0)’.
+Map Activity GetVariables: In this Map activity, ‘Integration Name’ received from Integration Metadata will be mapped to ‘Integration Code’ in Fetch Variable (request). Once ‘Integration Code’ gets passed to ‘XxGetLookupVariable(1.0)’ integration, values of variables can be retrieved.
+- GetPayload: This step will fetch the fusion payload from ATP db which is in JSON format.
+Map Activity: In this map activity, messageId and group_type are being mapped which is stored in ATP db to fetch fusion payload.
+- StageWrite: This is a stage write operation to write fusion payload being fetched from ATP.
+Map Activity: In this map activity, payload coming from ATP is being mapped.
+- StageRead: This is a stage read operation to read file written in previous step.
+- WMSScope:
+- ForEach loop
+AssignRMANumber: In this step, RMA numbers are being concatenated to fetch data from BI Report.
+
+---
+**Table:**
+
+| Variable Name | Data Type | Value |
+| varRMANumber | String | fn:concat($varRMANumber,',',$f0_ReceiptAdviceLine/ns302:ReceiptAdviceLine

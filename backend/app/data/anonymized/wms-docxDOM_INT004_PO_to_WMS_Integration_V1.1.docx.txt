@@ -1,0 +1,373 @@
+**Table:**
+
+| Business / Technical Brief |
+| [Anonymized Customer]-INT004 – PO to WMS Integration 22nd May 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+
+---
+
+# Document Control
+
+## Change History
+
+---
+**Table:**
+
+| Date | Author | Version | Description |
+| 22-May-2024 | Amit Sharma | 1a | Initial Version |
+| 03-June-2024 | Akanksha Sachan | 1b | Technical Design Update |
+|  |  |  |  |
+|  |  |  |  |
+
+---
+
+## Reviewed By
+
+---
+**Table:**
+
+| Date | reviewer | role |
+| 20-Jul-2024 | Rakesh Kumar Mishra | Technical Lead |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Introduction
+
+## Purpose
+
+The objective of this document is to provide a Design Specification to:
+Provide the necessary information with enough detail so that the Project team, have a clear understanding of the design and functional requirements.
+
+## Scope
+
+This document specifies the business context, functional requirements, and details to integrate Oracle Fusion Purchase Order from Procurement to Oracle Cloud WMS for Receipt transactions.
+A warehouse management system (or WMS) is a software application designed to support warehouse or distribution center management and staff. They facilitate management of available resources to move and store materials into, within, and out of a warehouse, while supporting staff in material movement and storage.
+Coordinating the communication with these systems to support purchase order receipts, returns to vendors, internal material transfers, inventory transactions, and sales order shipments is a substantial integration effort.
+Inventory Management Cloud supports a central integration framework across Oracle Procurement Cloud, Oracle Order Management Cloud, and Oracle Inventory Management based on web services to support the interactions between WMS and Fusion Cloud.
+Using these services, Inventory Management Cloud communicates Receipt Advice to Oracle Cloud WMS for processing.
+
+## Functional Overview
+
+Purchase Orders are created and approved in Fusion Procurement, as soon they are approved, orders are interfaced to WMS by ESS job ‘Generate Receipt Advice’ Program. In WMS, Purchase Orders are referred during receiving process in WMS.
+Allows for below transactions:
+- Creation
+- Modification (until receipt in initiated in WMS)
+
+# Business Objectives
+
+When integrating Oracle Inventory Management Cloud with a warehouse management system (or WMS), there is the requirement to send the Purchase Order Information as Receipt Advice to allow the Receiving Inventory Organization in WMS to Receive and Putaway the stock.
+The Generate Receipt Advice from Inventory to WMS will push the POs to WMS for further execution in WMS. The details such as PO number, supplier information, item number, item revision & quantity are published to WMS.
+In WMS, warehouse employee is responsible in performing below operations:
+- Creation of Receipt
+- Put Away of material in specified facility along with additional details of Locator/Serials/Lot if any.
+
+## Process Overview
+
+- Create approved Purchase Order in Oracle Fusion Cloud Procurement.
+- Schedule the process in Oracle Inventory Management “Generate Receipt Advice”.
+- Make allowed PO changes in Oracle Procurement.
+- Schedule the process in Oracle Inventory Management “Generate Changed Receipt Advice”.
+
+# Mapping
+
+# Pre-Conditions
+
+- The items should be interfaced to WMS from PDH (INT001)
+- Suppliers should be interfaced to WMS from Fusion Procurement Cloud (INT002)
+- Purchase Order Type should be created in WMS
+
+# Risk Matrix
+
+---
+**Table:**
+
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
+| PO Interface Failure to WMS due to missing item in WMS | 5 | 2 | Valid error message stating the integration failure. Re-run the item integration first and then the PO receipt advice integration |
+| PO interfaced to WMS with supplier details missing | 2 | 2 | Re-run the supplier integration first and then the PO receipt advice integration |
+
+---
+
+# Other Integrations Design Dependency
+
+---
+**Table:**
+
+| Name | Dependency | comments |
+| WMS Items (INT001) |  | Items should be interfaced to WMS from Fusion PDH |
+| WMS Suppliers (INT002) |  | Suppliers should be interfaced to WMS from Fusion Procurement |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Comments |
+| ESS ‘Generate Receipt Advice’ and  ‘Generate Changed Receipt Advice‘ | Every 5 Mins |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+|  |  |  |
+
+---
+
+# Business Use Case:
+
+- Create a PO in Fusion and interface to WMS for a non-inventory item.
+- Create a PO in Fusion and interface to WMS for a serial controlled item.
+- Create a PO in Fusion and interface to WMS for a lot/batch-controlled item.
+- Create expense PO in Fusion and interface to WMS.
+- Update the existing PO line quantity in Fusion and the same should reflect in WMS.
+- Create/Delete a PO line in Fusion for an existing PO and the same should reflect in WMS.
+
+# Open Items
+
+This section is used to summarize any open items related to the design.
+
+---
+**Table:**
+
+| No. | open item | data required | status | impact if not closed |
+| 001 |  |  |  |  |
+| 002 |  |  |  |  |
+| 003 |  |  |  |  |
+| 004 |  |  |  |  |
+| 005 |  |  |  |  |
+| 006 |  |  |  |  |
+| 007 |  |  |  |  |
+
+---
+
+# Technical Overview
+
+### Scope
+
+The objective of this document is to provide [Anonymized Customer] with a Technical Specification for Outbound Integration to extract the Purchase Order Data from SCM Cloud and publish to WMS Cloud.
+
+### Glossary
+
+---
+**Table:**
+
+| Annotation | Definition |
+| ERP | Enterprise Resource Planning |
+| SCM | Supply Chain Management |
+| OIC | Oracle integration cloud |
+| API | Application Programming Interface |
+| WMS | Warehouse Management System |
+| REST | Representational State Transfer |
+| XSD | XML Schema Definition |
+| FYI | For Your Information |
+
+---
+
+### Document References
+
+---
+**Table:**
+
+| Ref No | Name | File location |
+| 1 |  |  |
+| 2 |  |  |
+| 3 |  |  |
+
+---
+
+### Sample Data & Mapping Template
+
+---
+**Table:**
+
+| Description | File |
+| Data Mapping Template for Fusion to WMS |  |
+| Sample WMS XML Payload |  |
+
+---
+
+### Frequency
+
+---
+**Table:**
+
+| Responsiveness | Frequency | Volume |
+| Batch | Trigger with Ad Hoc Option | Depends on the Purchase Orders created in Fusion |
+
+---
+
+### Assumptions
+
+- Mapping between Sales Orders in SCM Cloud and WMS Facilities needs to be setup for this integration to extract data.
+- The integration includes the possibility to CREATE and UPDATE the PO from WMS Cloud. It only covers create/ update operation.
+- In case of any success/error in the integration, a notification email will be sent to the mail list configured in the OIC lookup.
+- Draft purchase orders and purchase order revisions are not taken into consideration.
+- The “Generate Receipt Advice” program will be scheduled, so it should not be submitted manually by user unless in case of urgency.
+
+### High Level Approach
+
+- The integration will trigger once the ESS job – “Generate Receipt Advice” is submitted. Integration will be subscribing to the event for “Receipt Advice Event Notification”.
+- “Generate Receipt Advice” job will be scheduled in fusion as per frequency decided to extract the purchase order details created after the last successful run of job.
+- Integration will be triggered by subscribing the event Business event “Receipt Advice Event Notification” is applied in the source ERP adapter responsible for the invocation of OIC integration.
+- The payload received from SCM will contains the purchase order details and purchase order line details.
+- The payload will be then converted into WMS XML required format by invoking the Rest API echoLgfDataOrder which will do the XML transformation internally.
+- The transformed XML data will be interfaced to WMS cloud using WMS InitStageInterfaceAPI service.
+
+### Pre-Requisites
+
+Send email and SMS integration “XxCommonNotificationHandler” should be deployed in the OIC.
+“XxGetLookupVariable” integration should be deployed in the OIC.
+Lookup “XX[Anonymized Customer]CommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ErrNotifyEmail Address in OIC.
+Lookup “Xx[Anonymized Customer]ConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+BIP Report should be present in path mentioned in XX[Anonymized Customer]CommonLookup.
+
+# Integration Analysis - XXSCMRECEIPTADVICEERPTOWMS
+
+This Integration component is responsible for for mapping Purchase orders from ERP Cloud to WMS Purchase orders.
+
+### Integration Components
+
+Below are the required components for this integration.
+
+---
+**Table:**
+
+| Integration Name | Integration Pattern | Package Name | Lookup Name |
+| XXSCMRECEIPTADVICEERPTOWMS | App Driven Orchestration |  | XX[Anonymized Customer]CommonLookup Xx[Anonymized Customer]ConstantLookup |
+
+---
+
+### Required Connections
+
+---
+**Table:**
+
+| Connection Name | Connection Type | Connection Role |
+| Xx[Anonymized Customer]ErpCloudConnection_WMSINT | Oracle ERP Cloud | Trigger and invoke |
+| Xx[Anonymized Customer]WMSConnection | REST | Trigger and invoke |
+| XxAtpDb | Oracle ATP | Trigger and invoke |
+| Xx[Anonymized Customer]lgfDataInvoke | REST | Trigger and invoke |
+| Xx[Anonymized Customer]BIReportConnection_WMSINT | SOAP | Invoke |
+
+---
+
+### Integration Outline
+
+Figure 1: Architecture Diagram
+The Following section explains the step – by- step process of publishing Purchase Orders from Fusion to WMS:
+Integration – XxScmReceiptAdviceErpToWms
+- ReceiptAdviceEventListner: This is oracle ERP cloud adapter connection which will subscribe to the ESS job event submitted in fusion to create Purchase Order.
+a.   Trigger Purpose: Receive Business Events raised within ERP Cloud.
+- Business Event for Subscription: Generate Receipt Advice.
+- Event Description - This event signals that purchase order is published for external systems to process the lines.
+ESS Job Details:
+
+---
+**Table:**
+
+| ESS Job Name | Frequency | Parameter |
+| Generate Receipt Advice | This job will be scheduled on agreed frequency with Ad hoc option | Parameter Name – Organization Puchase Order (Optional) |
+
+---
+
+- AssignGlobalVariable: The Global variable will be the Integration code which will be fetched from maintained lookup –“XX[Anonymized Customer]CommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup','IntegrationCode', '  XXSCMRECEIPTADVICEERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XX[Anonymized Customer]CommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+| vWMSPODtlFileRef | String | ‘’ |
+| vPoCreateFlag | String | 'Y' |
+
+---
+
+- FetchVariable: This step will invoke integration ‘XxGetLookupVariable(1.0)’.
+Map Activity FetchVariable: In this Map activity, ‘Integration Name’ received from Integration Metadata will be mapped to ‘Integration Code’ in Fetch Variable (request). Once ‘Integration Code’ gets passed to ‘XxGetLookupVariable(1.0)’ integration, values of variables can be retrieved.
+- InitAtp: This step is used to insert data in XXDOM_INT_INSTANCE_DETAILS_T table in autonomous database.
+Map Activity InitAtp: This Map Activity inserts data in XXDOM_INT_INSTANCE_DETAILS_T table.
+
+---
+**Table:**
+
+| Request Parameters | Values |
+| instanceId | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:instanceId |
+| integrationName | $self/nsmpr1:metadata/nsmpr1:integration/nsmpr1:name |
+| riceId | $FetchVariable/nsmpr0:GETResponse/nsmpr0:components.schemas.response-wrapper/ns35:RiceID |
+| createdBy | $self/nsmpr1:metadata/nsmpr1:runtime/nsmpr1:invokedBy |
+| status | 'Init' |
+| attribute1 | $tracking_var_1 |
+| attribute2 | $tracking_var_2 |
+| attribute3 | $tracking_var_3 |
+
+---
+
+- SetUpVariables:
+Below variables have been defined in this step:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| CurrentPotentialError | String | 'Error while invoking LgfData integration.' |
+| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') |
+| InstanceName | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'InstanceName', 'ID', '') |
+| CompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', /ns12:onEvent/ns18:getReceiptAdviceDetailsResponse/ns18:ReceiptAdvice/ns22:OrganizationCode, 'WMS_Company_Code', '') |
+| ParentCompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', /ns285:onEvent/ns291:getReceiptAdviceDetailsResponse/ns291:ReceiptAdvice/ns295:OrganizationCode, 'WMS_Company_Code', '') |
+| p_vendor_name | String | ‘’ |
+| p_supplier_site_code | String | ‘’ |
+
+---
+
+- IntegrationScope:
+- ForEachParameter
+AssignParameters: In this step, variables are being assigned to fetch vendor details from BI report.
+
+---
+**Table:**
+
+| Variable Name | Data Type | Value |
+| p_vendor_name | String | concat($p_vendor_name,',',/ns23:onEvent/inp1:getReceiptAdviceDetailsResponse/inp1:ReceiptAdvice/ns29:ReceiptAdviceLine/ns29:SupplierName) |
+| p_supplier_site_code | String | concat($p_supplier_site_code,',',/ns23:onEvent/inp1:getReceiptAdviceDetailsResponse/inp1:ReceiptAdvice/ns29:ReceiptAdviceLine/ns29:SupplierSiteCode) |
+
+---
+
+- FetchVendorCode: This is oracle SOAP connection which will make a call to BI report to fetch Vendor Code.
+- Map Activity FetchVendorCode: With this mapping activity we are passing report absolute path and parameters to BI report to fetch the report data.
+- AssignReportData: In this step we are decoding report data and assigning it to a variable as below:
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| Decode_Report | String | oraext:decodeBase64ToReference(fn:string($FetchVendorCode/tns:runReportResponse/tns:runReportReturn/tns:reportBytes)) |
+| vPoNumbers | String | ‘’ |
+
+---
+
+- ReadBI: This step involves using Stage File action to read Decode_Report assigned in previous step.
+- StageWriteWMS: This is a stage write operation to write dummy data in a csv.
+Map Activity: Mapping csv data with dummy variables.
+- AssignWMSPODtlFileRef: Storing stage file from previous step into a variable.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| vWMSPODtlFileRef | String | $StageWriteWMS/ns49:WriteResponse/ns51:WriteResponse/ns50:ICSFile/ns50:FileReference |
+
+---
+
+- ForEach loop: Repeating element is Each receipt Advice Line (/ns23:onEvent/inp1:getReceiptAdviceDetailsResponse/inp1:ReceiptAdvice/ns29:ReceiptAdviceLine).
+- Scope:
+- getPONbr: This is a WMS connection being invoked to check if PO exists in WMS. If it exists, this API will fetch the details.
+Map Activity: In this map activity, we are passing PO number to WMS API.
+- stageWritePoDetails: In this step, if PO exists in WMS, it will perform
