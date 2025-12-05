@@ -7,11 +7,18 @@ from app.services.vector_store_service import search_similar_chunks
 from app.services.secure_config import require_env, get_env
 
 # CONFIG_PROFILE = "GC3TEST02"
-CONFIG_PROFILE = require_env("CONFIG_PROFILE")
+# CONFIG_PROFILE = require_env("CONFIG_PROFILE")
+# config = oci.config.from_file(
+#     file_location=r"C:\Users\shshrohi\.oci\config",
+#     profile_name=CONFIG_PROFILE
+# )
+
+## for VM
 config = oci.config.from_file(
-    file_location=r"C:\Users\shshrohi\.oci\config",
-    profile_name=CONFIG_PROFILE
+    file_location="/home/opc/.oci/config",
+    profile_name="GC3TEST02"
 )
+
 
 # compartment_id = "ocid1.compartment.oc1..aaaaaaaa2pf2tel6ftytyrdkwaareqpcjfyfit6s62v4qdukfjiflqhlmura"
 compartment_id = require_env("COMPARTMENT_ID")
