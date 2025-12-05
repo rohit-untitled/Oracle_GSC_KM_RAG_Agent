@@ -32,12 +32,21 @@ _pool: Optional[oracledb.SessionPool] = None
 
 def init_oracle_client():
     try:
-        # IMPORTANT: MUST pass config_dir
-        oracledb.init_oracle_client(config_dir=WALLET_PATH)
-        logger.info(f"Oracle client initialized in THICK mode using wallet at: {WALLET_PATH}")
+        lib_path = "/opt/oracle/instantclient/instantclient_23_26"
+
+        if os.path.exists(lib_path):
+            oracledb.init_oracle_client(lib_dir=lib_path)
+            logger.info(f"Oracle client initialized in THICK mode using lib_dir={lib_path}")
+        elif WALLET_PATH:
+            oracledb.init_oracle_client(config_dir=WALLET_PATH)
+            logger.info(f"Oracle client initialized with wallet config_dir={WALLET_PATH}")
+
+        else:
+            logger.info("Instant Client not found. Running in THIN mode (no client needed).")
+
     except Exception as e:
         logger.error(f"Oracle client initialization failed: {e}")
-        logger.info("Falling back to THIN mode (no wallet).")
+        logger.info("Falling back to THIN mode.")
 
 init_oracle_client()
 
