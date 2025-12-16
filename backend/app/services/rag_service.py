@@ -1,30 +1,29 @@
 import oci
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List
 from app.services.oci_llm import call_oci_chat
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.vector_store_service import search_similar_chunks
-from app.services.secure_config import require_env, get_env
+from app.services.secure_config import require_env
 
-# CONFIG_PROFILE = "GC3TEST02"
-# CONFIG_PROFILE = require_env("CONFIG_PROFILE")
+
+# ------ VM Configuration -------
 # config = oci.config.from_file(
-#     file_location=r"C:\Users\shshrohi\.oci\config",
-#     profile_name=CONFIG_PROFILE
+#     file_location="/home/opc/.oci/config",
+#     profile_name="GC3TEST02"
 # )
 
-## for VM
+
+# ---- OCI Configuration ----
+CONFIG_PROFILE = require_env("CONFIG_PROFILE")
 config = oci.config.from_file(
-    file_location="/home/opc/.oci/config",
-    profile_name="GC3TEST02"
+    file_location=r"C:\\Users\\shshrohi\\.oci\\config",
+    profile_name=CONFIG_PROFILE
 )
+session_history = {}
 
-
-# compartment_id = "ocid1.compartment.oc1..aaaaaaaa2pf2tel6ftytyrdkwaareqpcjfyfit6s62v4qdukfjiflqhlmura"
 compartment_id = require_env("COMPARTMENT_ID")
-# MODEL_ID = "ocid1.generativeaimodel.oc1.ap-hyderabad-1.amaaaaaask7dceyaaccktjkitpfn3zp3xnkg6yclc6izeahggh2hkwawfjna"
 MODEL_ID = require_env("MODEL_ID")
-# endpoint = "https://inference.generativeai.ap-hyderabad-1.oci.oraclecloud.com"
 endpoint = require_env("ENDPOINT")
 
 generative_ai_inference_client = oci.generative_ai_inference.GenerativeAiInferenceClient(
@@ -35,25 +34,23 @@ generative_ai_inference_client = oci.generative_ai_inference.GenerativeAiInferen
 )
 
 def ai_redact_sensitive_info(text: str) -> str:
-    """Send text to OCI Generative AI to anonymize sensitive info."""
     USER_MESSAGE = f"""
-    You are a data anonymization expert. Replace all company/customer names
-    that are NOT 'Oracle' with [Anonymized Customer].
+        You are a data anonymization expert. Replace all company/customer names
+        that are NOT 'Oracle' with [Anonymized Customer].
 
-    Return only the anonymized text.
+        Return only the anonymized text.
 
-    Original Text: {text}
+        Original Text: {text}
 
-    Anonymized Text:
+        Anonymized Text:
     """
+
     chat_detail = oci.generative_ai_inference.models.ChatDetails()
     chat_request = oci.generative_ai_inference.models.CohereChatRequest()
+
     chat_request.message = USER_MESSAGE
     chat_request.max_tokens = 4000
     chat_request.temperature = 1
-    chat_request.frequency_penalty = 0
-    chat_request.top_p = 0.75
-    chat_request.top_k = 0
 
     chat_detail.serving_mode = oci.generative_ai_inference.models.OnDemandServingMode(model_id=MODEL_ID)
     chat_detail.chat_request = chat_request
@@ -62,29 +59,48 @@ def ai_redact_sensitive_info(text: str) -> str:
     response = generative_ai_inference_client.chat(chat_detail)
     return response.data.chat_response.text
 
-def answer_query(query: str, top_k: int = 5, llm_model: str = MODEL_ID) -> Dict[str, Any]:
-    """
-    End-to-end RAG: embed query -> vector search -> LLM answer
-    """
-    embedder = OCIEmbeddingService()
+# MAIN RAG + CONVERSATION FUNCTION
 
+def answer_query(query: str, top_k: int = 5, session_id: str = None) -> Dict[str, Any]:
+    global session_history
+
+    if session_id is None:
+        session_id = "default"
+
+    if session_id not in session_history:
+        session_history[session_id] = []
+
+    history = session_history[session_id]
+
+    embedder = OCIEmbeddingService()
     query_embedding = embedder.embed_text(query)
     hits = search_similar_chunks(query_embedding, top_k=top_k)
 
-    context = "\n\n".join([h["chunk"] for h in hits])
+    context_text = "\n\n".join([h["chunk"] for h in hits])
+
+    history_block = "\n".join([f"{t['role'].upper()}: {t['content']}" for t in history])
 
     prompt = f"""
-You are a helpful assistant. Use the context below to answer the question.
+        You are a helpful assistant.
 
-CONTEXT:
-{context}
+        CONVERSATION HISTORY:
+        {history_block}
 
-QUESTION:
-{query}
+        CONTEXT:
+        {context_text}
 
-Answer concisely and reference which chunk the info came from when relevant.
-"""
+        USER QUESTION:
+        {query}
+        """
 
-    llm_resp = call_oci_chat(prompt)
-    answer_text = llm_resp
-    return {"answer": answer_text, "chunks": hits}
+    llm_output = call_oci_chat(prompt)
+
+    history.append({"role": "user", "content": query})
+    history.append({"role": "assistant", "content": llm_output})
+
+    return {
+        "answer": llm_output,
+        "chunks": hits,
+        "history_length": len(history),
+        "session_id": session_id
+    }

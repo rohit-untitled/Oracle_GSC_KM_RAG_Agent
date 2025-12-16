@@ -24,6 +24,7 @@ from app.services.rag_service import answer_query, ai_redact_sensitive_info
 from app.services.vector_store_service import insert_embeddings_from_json
 from app.services.oci_downloader import download_all_from_bucket
 from app.services.vector_store_service import init_oracle_client
+from app.services.rag_service import session_history
 init_oracle_client()
 
 
@@ -36,10 +37,11 @@ logger = logging.getLogger("ai_redaction_agent")
 
 app = FastAPI(
     title="AI Redaction Agent",
-    description="RAG-powered system for privacy-safe document Q&A and redaction",
-    version="1.0.0",
+    description="RAG-powered system for Q&A and redaction with multi-turn memory",
+    version="2.0.0",
 )
 
+conversation_sessions = {}
 
 def get_docs_folder() -> str:
     return os.path.join(
@@ -232,15 +234,37 @@ def store_embeddings_endpoint():
 class RAGRequest(BaseModel):
     query: str
     top_k: Optional[int] = 5
+    session_id: Optional[str] = "default-session"
+
+@app.get("/session-history")
+def session_history_api(session_id: str):
+    # session_history comes from rag_service.py
+    from app.services.rag_service import session_history
+    return session_history.get(session_id, [])
 
 @app.post("/ask")
 def ask_endpoint(payload: RAGRequest):
     """
-    Query the RAG system and get LLM answer
+    Multi-turn RAG Q&A endpoint.
     """
+    logger.info(f"Session {payload.session_id}: Received query -> {payload.query}")
+
     try:
-        response = answer_query(payload.query, top_k=payload.top_k)
-        return response
+        session_id = payload.session_id or "default-session"
+
+        response = answer_query(
+            query=payload.query,
+            top_k=payload.top_k,
+            session_id=session_id
+        )
+
+        return {
+            "session_id": session_id,
+            "answer": response["answer"],
+            "chunks": response["chunks"],
+            "history_length": response["history_length"]
+        }
+
     except Exception as e:
         logger.exception(f"Error in RAG query: {e}")
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))

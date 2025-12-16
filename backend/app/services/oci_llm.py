@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # CONFIG_PROFILE = "GC3TEST02"
 CONFIG_PROFILE = require_env("CONFIG_PROFILE")
-# COMPARTMENT_ID = "ocid1.compartment.oc1..aaaaaaaa2pf2tel6ftytyrdkwaareqpcjfyfit6s62v4qdukfjiflqhlmura"
 COMPARTMENT_ID = require_env("COMPARTMENT_ID")
-# MODEL_ID = "ocid1.generativeaimodel.oc1.ap-hyderabad-1.amaaaaaask7dceyaaccktjkitpfn3zp3xnkg6yclc6izeahggh2hkwawfjna"
 MODEL_ID = require_env("MODEL_ID")
 
 
@@ -34,7 +32,6 @@ except Exception as e:
     logger.error(f"Failed to load OCI config: {e}")
     raise
 
-# ENDPOINT = "https://inference.generativeai.ap-hyderabad-1.oci.oraclecloud.com"
 ENDPOINT = require_env("ENDPOINT")
 
 
