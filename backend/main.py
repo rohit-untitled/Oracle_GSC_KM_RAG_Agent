@@ -247,11 +247,10 @@ def ask_endpoint(payload: RAGRequest):
     """
     Multi-turn RAG Q&A endpoint.
     """
+    session_id = payload.session_id or "default-session"
     logger.info(f"Session {payload.session_id}: Received query -> {payload.query}")
 
     try:
-        session_id = payload.session_id or "default-session"
-
         response = answer_query(
             query=payload.query,
             top_k=payload.top_k,

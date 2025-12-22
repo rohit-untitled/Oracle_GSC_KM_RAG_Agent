@@ -20,7 +20,7 @@ config = oci.config.from_file(
     file_location=r"C:\\Users\\shshrohi\\.oci\\config",
     profile_name=CONFIG_PROFILE
 )
-session_history = {}
+session_history: Dict[str, list] = {}
 
 compartment_id = require_env("COMPARTMENT_ID")
 MODEL_ID = require_env("MODEL_ID")
@@ -61,11 +61,11 @@ def ai_redact_sensitive_info(text: str) -> str:
 
 # MAIN RAG + CONVERSATION FUNCTION
 
-def answer_query(query: str, top_k: int = 5, session_id: str = None) -> Dict[str, Any]:
+def answer_query(query: str, top_k: int = 5, session_id: str | None = None) -> Dict[str, Any]:
     global session_history
 
-    if session_id is None:
-        session_id = "default"
+    if not session_id:
+        session_id = "default-session"
 
     if session_id not in session_history:
         session_history[session_id] = []
@@ -74,27 +74,37 @@ def answer_query(query: str, top_k: int = 5, session_id: str = None) -> Dict[str
 
     embedder = OCIEmbeddingService()
     query_embedding = embedder.embed_text(query)
+
     hits = search_similar_chunks(query_embedding, top_k=top_k)
 
-    context_text = "\n\n".join([h["chunk"] for h in hits])
+    documents = []
+    for i, h in enumerate(hits):
+        documents.append({
+            "title": f"Document Chunk {i+1}",
+            "snippet": h["chunk"]
+        })
 
-    history_block = "\n".join([f"{t['role'].upper()}: {t['content']}" for t in history])
+    cohere_history = []
+    for turn in history:
+        if turn["role"] == "user":
+            cohere_history.append({
+                "role": "USER",
+                "message": turn["content"]
+            })
+        elif turn["role"] == "assistant":
+            cohere_history.append({
+                "role": "CHATBOT",
+                "message": turn["content"]
+            })
 
-    prompt = f"""
-        You are a helpful assistant.
+    # ---- Call OCI Cohere Chat ----
+    llm_output = call_oci_chat(
+        message=query,
+        chat_history=cohere_history,
+        documents=documents
+    )
 
-        CONVERSATION HISTORY:
-        {history_block}
-
-        CONTEXT:
-        {context_text}
-
-        USER QUESTION:
-        {query}
-        """
-
-    llm_output = call_oci_chat(prompt)
-
+    # ---- Persist history ----
     history.append({"role": "user", "content": query})
     history.append({"role": "assistant", "content": llm_output})
 
