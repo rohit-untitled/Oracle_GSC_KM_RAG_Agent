@@ -1,0 +1,12 @@
+pocsolutionsatpdev_high = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.ap-hyderabad-1.oraclecloud.com))(connect_data=(service_name=g9294bf6df9f826_pocsolutionsatpdev_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
+
+pocsolutionsatpdev_low = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.ap-hyderabad-1.oraclecloud.com))(connect_data=(service_name=g9294bf6df9f826_pocsolutionsatpdev_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
+
+pocsolutionsatpdev_medium = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.ap-hyderabad-1.oraclecloud.com))(connect_data=(service_name=g9294bf6df9f826_pocsolutionsatpdev_medium.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
+
+pocsolutionsatpdev_tp = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.ap-hyderabad-1.oraclecloud.com))(connect_data=(service_name=g9294bf6df9f826_pocsolutionsatpdev_tp.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
+
+pocsolutionsatpdev_tpurgent = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.ap-hyderabad-1.oraclecloud.com))(connect_data=(service_name=g9294bf6df9f826_pocsolutionsatpdev_tpurgent.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
+
+
+
