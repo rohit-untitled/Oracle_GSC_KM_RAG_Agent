@@ -1,4 +1,4 @@
-## for windows oracle client
+# ## for windows oracle client
 
 # import os
 # import json
@@ -16,13 +16,6 @@
 # WALLET_PATH = get_env("ORACLE_WALLET_PATH")
 # if WALLET_PATH:
 #     os.environ["TNS_ADMIN"] = WALLET_PATH
-
-
-# # DB_USER = os.getenv("ORACLE_DB_USER", "gsc_km_2")
-# # DB_PASSWORD = os.getenv("ORACLE_DB_PASSWORD", "Pa$$word#234")
-# # DB_TNS = os.getenv("ORACLE_DB_TNS", "pocsolutionsatpdev_high")
-
-# # VECTOR_DIM = int(os.getenv("VECTOR_DIM", "1536"))
 
 # DB_USER = require_env("ORACLE_DB_USER")
 # DB_PASSWORD = require_env("ORACLE_DB_PASSWORD")
@@ -237,35 +230,38 @@ from app.services.secure_config import require_env, get_env
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# --------------------------------------------------
+# Environment
+# --------------------------------------------------
 DB_USER = require_env("ORACLE_DB_USER")
 DB_PASSWORD = require_env("ORACLE_DB_PASSWORD")
 DB_TNS = require_env("ORACLE_DB_TNS")
-
-WALLET_PATH = get_env("ORACLE_WALLET_PATH")
+WALLET_PATH = require_env("ORACLE_WALLET_PATH")
 VECTOR_DIM = int(get_env("VECTOR_DIM", "1536"))
 
-if WALLET_PATH:
-    os.environ["TNS_ADMIN"] = WALLET_PATH
+# --------------------------------------------------
+# Force THICK mode with Wallet
+# --------------------------------------------------
+INSTANT_CLIENT = "/opt/oracle/instantclient_23_26"
 
-def init_oracle_client():
-    try:
-        lib_path = "/opt/oracle/instantclient_23_26"
-        if os.path.exists(lib_path):
-            oracledb.init_oracle_client(lib_dir=lib_path)
-            logger.info("Oracle client initialized (THICK mode)")
-        else:
-            logger.info("Instant Client not found → using THIN mode")
-    except Exception as e:
-        logger.warning(f"Oracle client init skipped: {e}")
+if not os.path.exists(INSTANT_CLIENT):
+    raise RuntimeError("Oracle Instant Client not found")
 
-init_oracle_client()
+if not os.path.exists(WALLET_PATH):
+    raise RuntimeError("Oracle Wallet path not found")
 
+oracledb.init_oracle_client(
+    lib_dir=INSTANT_CLIENT,
+    config_dir=WALLET_PATH
+)
+
+# --------------------------------------------------
+# Connection Pool
+# --------------------------------------------------
 _pool: Optional[oracledb.ConnectionPool] = None
 
+
 def get_pool() -> oracledb.ConnectionPool:
-    """
-    Create pool once and reuse it.
-    """
     global _pool
     if _pool is None:
         logger.info("Creating Oracle connection pool...")
@@ -274,35 +270,32 @@ def get_pool() -> oracledb.ConnectionPool:
             password=DB_PASSWORD,
             dsn=DB_TNS,
             min=1,
-            max=3,              
+            max=5,
             increment=1,
             timeout=60,
             getmode=oracledb.POOL_GETMODE_WAIT,
         )
-        logger.info("Oracle connection pool created.")
+        logger.info("Oracle connection pool created")
     return _pool
 
 
 def get_connection() -> oracledb.Connection:
-    """
-    Acquire a pooled connection.
-    """
     return get_pool().acquire()
 
 
 def close_pool():
-    """
-    Gracefully close pool (used on shutdown if needed).
-    """
     global _pool
     if _pool:
         try:
             _pool.close()
-            logger.info("Oracle pool closed.")
+            logger.info("Oracle pool closed")
         finally:
             _pool = None
 
 
+# --------------------------------------------------
+# Health Check
+# --------------------------------------------------
 def test_connection() -> Dict[str, Any]:
     conn = None
     cur = None
@@ -319,13 +312,16 @@ def test_connection() -> Dict[str, Any]:
         if cur:
             cur.close()
         if conn:
-            conn.close()  # RETURNS TO POOL
+            conn.close()  # returns to pool
 
 
+# --------------------------------------------------
+# Inserts
+# --------------------------------------------------
 def insert_embedding_record(
     chunk_text: str,
     embedding_vector: List[float],
-    metadata: Dict[str, Any]
+    metadata: Dict[str, Any],
 ):
     conn = None
     cur = None
@@ -354,6 +350,7 @@ def insert_embedding_record(
             cur.close()
         if conn:
             conn.close()
+
 
 def insert_embeddings_from_json(json_file_path: str) -> int:
     conn = None
@@ -391,7 +388,6 @@ def insert_embeddings_from_json(json_file_path: str) -> int:
 
         conn.commit()
         logger.info(f"Batch insert complete: {inserted} rows")
-
     finally:
         if cur:
             cur.close()
@@ -400,9 +396,13 @@ def insert_embeddings_from_json(json_file_path: str) -> int:
 
     return inserted
 
+
+# --------------------------------------------------
+# Vector Search
+# --------------------------------------------------
 def search_similar_chunks(
     query_embedding: List[float],
-    top_k: int = 5
+    top_k: int = 5,
 ) -> List[Dict[str, Any]]:
 
     conn = None
