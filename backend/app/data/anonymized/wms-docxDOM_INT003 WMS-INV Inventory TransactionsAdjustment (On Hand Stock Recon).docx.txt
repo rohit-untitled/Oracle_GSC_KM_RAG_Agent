@@ -1,7 +1,7 @@
 **Table:**
 
 |  |
-| [Anonymized Customer]-INT003 WMS-INV Inventory Transactions/Adjustment (On Hand Stock Recon) 5th June 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
+| [Anonymized Customer] WMS-INV Inventory Transactions/Adjustment (On Hand Stock Recon) 5th June 2024, Version  Copyright © 2024, Oracle and/or its affiliates |
 |  |
 
 ---
@@ -342,4 +342,4 @@ TBD
 - The Fusion Inventory Organization structure should be mapped with WMS Inventory Organization structure. i.e. Inventory organization and Sub-inventory of Fusion should be mapped with WMS.
 - Items should be active and in sync in Fusion Inventory and WMS.
 - UOMs should be active and in sync in Fusion Inventory.
-- There should not be any stuck transaction in WMS
+- There should not be any stuck transaction in WMS, OIC and

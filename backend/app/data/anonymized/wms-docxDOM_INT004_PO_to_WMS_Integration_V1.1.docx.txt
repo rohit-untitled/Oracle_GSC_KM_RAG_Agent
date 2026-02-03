@@ -225,9 +225,9 @@ The objective of this document is to provide [Anonymized Customer] with a Techni
 
 Send email and SMS integration “XxCommonNotificationHandler” should be deployed in the OIC.
 “XxGetLookupVariable” integration should be deployed in the OIC.
-Lookup “XX[Anonymized Customer]CommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ErrNotifyEmail Address in OIC.
-Lookup “Xx[Anonymized Customer]ConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
-BIP Report should be present in path mentioned in XX[Anonymized Customer]CommonLookup.
+Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ErrNotifyEmail Address in OIC.
+Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+BIP Report should be present in path mentioned in XXDominoCommonLookup.
 
 # Integration Analysis - XXSCMRECEIPTADVICEERPTOWMS
 
@@ -241,7 +241,7 @@ Below are the required components for this integration.
 **Table:**
 
 | Integration Name | Integration Pattern | Package Name | Lookup Name |
-| XXSCMRECEIPTADVICEERPTOWMS | App Driven Orchestration |  | XX[Anonymized Customer]CommonLookup Xx[Anonymized Customer]ConstantLookup |
+| XXSCMRECEIPTADVICEERPTOWMS | App Driven Orchestration |  | XXDominoCommonLookup XxDominoConstantLookup |
 
 ---
 
@@ -251,11 +251,11 @@ Below are the required components for this integration.
 **Table:**
 
 | Connection Name | Connection Type | Connection Role |
-| Xx[Anonymized Customer]ErpCloudConnection_WMSINT | Oracle ERP Cloud | Trigger and invoke |
-| Xx[Anonymized Customer]WMSConnection | REST | Trigger and invoke |
+| XxDominoErpCloudConnection_WMSINT | Oracle ERP Cloud | Trigger and invoke |
+| XxDominoWMSConnection | REST | Trigger and invoke |
 | XxAtpDb | Oracle ATP | Trigger and invoke |
-| Xx[Anonymized Customer]lgfDataInvoke | REST | Trigger and invoke |
-| Xx[Anonymized Customer]BIReportConnection_WMSINT | SOAP | Invoke |
+| XxDominolgfDataInvoke | REST | Trigger and invoke |
+| XxDominoBIReportConnection_WMSINT | SOAP | Invoke |
 
 ---
 
@@ -278,13 +278,13 @@ ESS Job Details:
 
 ---
 
-- AssignGlobalVariable: The Global variable will be the Integration code which will be fetched from maintained lookup –“XX[Anonymized Customer]CommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
+- AssignGlobalVariable: The Global variable will be the Integration code which will be fetched from maintained lookup –“XXDominoCommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
 
 ---
 **Table:**
 
 | Variable name | Data type | Value |
-| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup','IntegrationCode', '  XXSCMRECEIPTADVICEERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XX[Anonymized Customer]CommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', '  XXSCMRECEIPTADVICEERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
 | vWMSPODtlFileRef | String | ‘’ |
 | vPoCreateFlag | String | 'Y' |
 
@@ -318,10 +318,10 @@ Below variables have been defined in this step:
 
 | Variable name | Data type | Value |
 | CurrentPotentialError | String | 'Error while invoking LgfData integration.' |
-| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') |
-| InstanceName | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'InstanceName', 'ID', '') |
-| CompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', /ns12:onEvent/ns18:getReceiptAdviceDetailsResponse/ns18:ReceiptAdvice/ns22:OrganizationCode, 'WMS_Company_Code', '') |
-| ParentCompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', /ns285:onEvent/ns291:getReceiptAdviceDetailsResponse/ns291:ReceiptAdvice/ns295:OrganizationCode, 'WMS_Company_Code', '') |
+| EmailFrom | String | dvm:lookupValue('XxDominoConstantLookup', 'ID', 'FromEmailId', 'Value', '') |
+| InstanceName | String | dvm:lookupValue('XxDominoConstantLookup', 'ID', 'InstanceName', 'ID', '') |
+| CompanyCode | String | dvm:lookupValue('XXDominoWmsCompanyLookup', 'Organization', /ns12:onEvent/ns18:getReceiptAdviceDetailsResponse/ns18:ReceiptAdvice/ns22:OrganizationCode, 'WMS_Company_Code', '') |
+| ParentCompanyCode | String | dvm:lookupValue('XXDominoWmsCompanyLookup', 'Organization', /ns285:onEvent/ns291:getReceiptAdviceDetailsResponse/ns291:ReceiptAdvice/ns295:OrganizationCode, 'WMS_Company_Code', '') |
 | p_vendor_name | String | ‘’ |
 | p_supplier_site_code | String | ‘’ |
 
@@ -370,4 +370,12 @@ Map Activity: Mapping csv data with dummy variables.
 - Scope:
 - getPONbr: This is a WMS connection being invoked to check if PO exists in WMS. If it exists, this API will fetch the details.
 Map Activity: In this map activity, we are passing PO number to WMS API.
-- stageWritePoDetails: In this step, if PO exists in WMS, it will perform
+- stageWritePoDetails: In this step, if PO exists in WMS, it will perform stage write operation to write PO details.
+Map Activity: In this map activity, we are passing PO details
+- AssignFileRef1: Storing stage file from previous step into a variable.
+
+---
+**Table:**
+
+| Variable name | Data type | Value |
+| vWMSPODtlFileRef | String | $stageWritePoDetails/ns60:

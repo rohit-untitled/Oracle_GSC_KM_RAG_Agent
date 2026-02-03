@@ -35,8 +35,8 @@ generative_ai_inference_client = oci.generative_ai_inference.GenerativeAiInferen
 
 def ai_redact_sensitive_info(text: str) -> str:
     USER_MESSAGE = f"""
-        You are a data anonymization expert. Replace all company/customer names
-        that are NOT 'Oracle' with [Anonymized Customer].
+        You are a data anonymization expert. Replace all company/customer names or any critical information
+        that are NOT 'Oracle' or similar with [Anonymized Customer].
 
         Return only the anonymized text.
 

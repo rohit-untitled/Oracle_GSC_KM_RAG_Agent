@@ -116,7 +116,7 @@ The above picture depicts the process flow as per business requirement. The step
 ---
 **Table:**
 
-| Event | Frequency | Data volume |
+| EveEve | Frequency | Data volume |
 | Event Based | As per transaction changes |  |
 |  |  |  |
 |  |  |  |
@@ -155,7 +155,7 @@ This section is used to summarize any open items related to the design.
 
 ### Scope
 
-The objective of this document is to provide [Anonymized Customer] with a Technical Specification for Outbound Integration for Publishing Items from Fusion to WMS.
+The objective of this document is to provide [Anonymized Customer] with a Technical  Specification for Outbound Integration for Publishing Items from Fusion to WMS.
 
 ### Glossary
 
@@ -360,4 +360,4 @@ The request will be sent to WMS API as – Send query parameters   as form data 
 **Table:**
 
 | Variable name | Data type | Value |
-| v_deliveryid | String | fn:concat($GetOrderHeaderDetails/ns25:executeResponse/ns29:response
+| v_deliveryid | String | fn:concat($GetOrderHeaderDetails/ns25:executeResponse/ns29

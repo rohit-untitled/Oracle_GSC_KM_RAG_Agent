@@ -228,7 +228,7 @@ Lookup “XxDominoConstantLookup” should be present with all the required deta
 XxScmReceiptRmaRequestErpToWms, XxScmReceiptRmaRequestProcessErpToWms should be deployed in OIC.
 " XxParkingLotProducer(1.0)" should be deployed in OIC.
 " XxGetLookupVariable(1.0)" should be deployed in OIC.
-BIP Report should be present in the path mentioned in XXDominoCommonLookup.
+BIP Report should be present in the path mentioned in  XXDominoCommonLookup.
 
 # Integration Analysis – XxScmReceiptRmaRequestErpToWms, XxScmReceiptRmaRequestProcessErpToWms
 
@@ -286,7 +286,7 @@ The Following section explains the step – by- step process of publishing items
 **Table:**
 
 | Variable name | Data type | Value |
-| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', ' XXSCMRECEIPTRMAREQUESTERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', '  XXSCMRECEIPTRMAREQUESTERPTOWMS, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
 
 ---
 
@@ -323,7 +323,7 @@ Figure 3. Scope Fault Handler
 **Table:**
 
 | Variable name | Data type | Value |
-| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', ' XXSCMRECEIPTRMAREQUESTPROCESSERP, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', '  XXSCMRECEIPTRMAREQUESTPROCESSERP, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable is Integration identifier. |
 | varRMANumber | String | ‘’ |
 
 ---
@@ -343,4 +343,4 @@ AssignRMANumber: In this step, RMA numbers are being concatenated to fetch data 
 **Table:**
 
 | Variable Name | Data Type | Value |
-| varRMANumber | String | fn:concat($varRMANumber,',',$f0_ReceiptAdviceLine/ns302:ReceiptAdviceLine
+| varRMANumber | String | fn:concat($varRMANumber,',',$f0_ReceiptAdviceLine/ns302:

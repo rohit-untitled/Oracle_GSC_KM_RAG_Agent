@@ -13,8 +13,8 @@
 **Table:**
 
 | Date | Author | Version | Description |
-| 22-May-2024 | Amit Sharma | 1a | Initial Version |
-| 27-June-2024 | Akanksha Sachan | 1b | Technical Overview Update |
+| 22-May-2024 | [Anonymized Customer] | 1a | Initial Version |
+| 27-June-2024 | [Anonymized Customer] | 1b | Technical Overview Update |
 |  |  |  |  |
 |  |  |  |  |
 
@@ -25,8 +25,8 @@
 ---
 **Table:**
 
-| Date | Reviewer | Role |
-| 27-Jun-2024 | Rakesh Mishra | Technical Lead |
+| Date | reviewer | role |
+| 27-Jun-2024 | [Anonymized Customer] | Technical Lead |
 |  |  |  |
 |  |  |  |
 |  |  |  |
@@ -101,7 +101,7 @@ ref_value_15 (VendorSiteId)
 ---
 **Table:**
 
-| Risk | Impact (1 to 5) | Probability (1 to 5) | Mitigation |
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
 | PO interfaced to WMS with supplier details missing | 2 | 2 | Re-run the supplier integration first and then the PO receipt advice integration |
 | ASN Created in WMS with ASN type missing |  |  | Define ASN type in WMS and rerun the integration. |
 |  |  |  |  |
@@ -116,7 +116,7 @@ ref_value_15 (VendorSiteId)
 ---
 **Table:**
 
-| Name | Dependency | Comments |
+| Name | Dependency | comments |
 | WMS Items (INT001) |  | Items should be interfaced to WMS from Fusion PDH |
 | WMS Suppliers (INT002) |  | Suppliers should be interfaced to WMS from Fusion Procurement |
 | INV WMS Receipt Advice -PO (INT004) |  | PO should be interfaced to WMS from Fusion Procurement |
@@ -150,7 +150,7 @@ This section is used to summarize any open items related to the design.
 ---
 **Table:**
 
-| No. | Open Item | Data Required | Status | Impact if not Closed |
+| No. | open item | data required | status | impact if not closed |
 | 001 |  |  |  |  |
 | 002 |  |  |  |  |
 | 003 |  |  |  |  |
@@ -173,7 +173,7 @@ This section is used to summarize any open items related to the design.
 
 ### Scope
 
-The objective of this document is to provide a Technical Specification of Inbound Integration Receipt Confirmation flow between Warehouse Management System (WMS) and Oracle Fusion Inventory Management.
+The objective of this document is to provide with a Technical Specification of Inbound Integration Receipt Confirmation flow between Warehouse Management System (WMS) and Oracle Fusion Inventory Management.
 
 ### Glossary
 
@@ -183,7 +183,7 @@ The objective of this document is to provide a Technical Specification of Inboun
 | Annotation | Definition |
 | ERP | Enterprise Resource Planning |
 | SCM | Supply Chain Management |
-| OIC | Oracle Integration Cloud |
+| OIC | Oracle integration cloud |
 | WMS | Warehouse Management System |
 | REST | Representational State Transfer |
 | XSD | XML Schema Definition |
@@ -196,7 +196,7 @@ The objective of this document is to provide a Technical Specification of Inboun
 ---
 **Table:**
 
-| Ref No | Name | File Location |
+| Ref No | Name | File location |
 |  |  |  |
 |  |  |  |
 |  |  |  |
@@ -228,7 +228,7 @@ The objective of this document is to provide a Technical Specification of Inboun
 
 ### Pre-Requisites
 
-Send Email Integration “XxCommonNotificationHandler” should be deployed in the OIC.
+Send Email Integration ““XxCommonNotificationHandler” should be deployed in the OIC.
 Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
 Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
 Lookup “XxDominoWmsSubInvLookup” should be present in OIC.
@@ -364,6 +364,6 @@ This section is used to summarize any open and closed questions relating to Erro
 
 | ID | Topic | Description | Status | Owner |
 | 1 |  |  |  |  |
-| 2 |  |  |  |  |
+| 2. |  |  |  |  |
 
 ---

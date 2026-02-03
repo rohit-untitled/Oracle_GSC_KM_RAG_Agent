@@ -23,9 +23,7 @@ from app.services.embedding_service import OCIEmbeddingService
 from app.services.rag_service import answer_query, ai_redact_sensitive_info
 from app.services.vector_store_service import insert_embeddings_from_json
 from app.services.oci_downloader import download_all_from_bucket
-from app.services.vector_store_service import init_oracle_client
 from app.services.rag_service import session_history
-init_oracle_client()
 
 
 # ---- Logging setup ----

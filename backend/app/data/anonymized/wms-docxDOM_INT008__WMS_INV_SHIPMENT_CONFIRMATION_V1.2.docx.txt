@@ -244,9 +244,9 @@ The objective of this document is to provide with a Technical Specification of I
 ### Pre-Requisites
 
 Send Email Integration ““XxCommonNotificationHandler” should be deployed in the OIC.
-Lookup “XX[Anonymized Customer]CommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
-Lookup “Xx[Anonymized Customer]ConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
-Lookup “Xx[Anonymized Customer]WmsSubInvLookup” should be present in OIC.
+Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
+Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+Lookup “XxDominoWmsSubInvLookup” should be present in OIC.
 
 # Integration Analysis –XxScmShipmentConfirmationWmsToErp
 
@@ -260,7 +260,7 @@ Below are the required components for this integration.
 **Table:**
 
 | Integration Name | Integration Pattern | Package Name | Lookup Name |
-| XxScmShipmentConfirmationWmsToErp | App Driven Orchestration |  | XX[Anonymized Customer]CommonLookup, Xx[Anonymized Customer]ConstantLookup, Xx[Anonymized Customer]WmsSubInvLookup |
+| XxScmShipmentConfirmationWmsToErp | App Driven Orchestration |  | XXDominoCommonLookup, XxDominoConstantLookup, XxDominoWmsSubInvLookup |
 
 ---
 
@@ -270,9 +270,9 @@ Below are the required components for this integration.
 **Table:**
 
 | Connection Name | Connection Type | Connection Role |
-| Xx[Anonymized Customer]ErpCloudConnection | Oracle ERP Cloud | Trigger and invoke |
+| XxDominoErpCloudConnection | Oracle ERP Cloud | Trigger and invoke |
 | XxOicRestTrigger | REST | Trigger |
-| Xx[Anonymized Customer]ErpCloudSoap | SOAP | Trigger and invoke |
+| XxDominoErpCloudSoap | SOAP | Trigger and invoke |
 
 ---
 
@@ -281,13 +281,13 @@ Below are the required components for this integration.
 The following section explains the step - by- step process of Shipment Confirmation from WMS to ERP:
 Integration – XxScmShipmentConfirmationWmsToErp
 - postShipmentConfirmation : It uses Rest adapter to fetch the shipment confirmation related information from WMS.
-- Global Assignment: The Global variable will be the Integration code which will be fetched from maintained lookup – “XX[Anonymized Customer]CommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
+- Global Assignment: The Global variable will be the Integration code which will be fetched from maintained lookup –“XXDominoCommonLookup” with the reference of this lookup all other local variables will fetched which are given below.
 
 ---
 **Table:**
 
 | Variable name | Data type | Value |
-| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationCode', ‘XXSCMSHIPMENTCONFIRMATIONWMSTOER’, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XX[Anonymized Customer]CommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable comes from Integration identifier. |
+| IntegrationCode | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', ‘XXSCMSHIPMENTCONFIRMATIONWMSTOER’, 'IntegrationCode', '') IntegrationCode will be fetched from OIC lookup “XXDominoCommonLookup”, with reference to this lookup all other local variables will be fetched. Value for IntegrationCode variable comes from Integration identifier. |
 
 ---
 
@@ -297,10 +297,10 @@ Integration – XxScmShipmentConfirmationWmsToErp
 **Table:**
 
 | Variable name | Data type | Value |
-| IntegrationID | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationCode', $IntegrationCode, 'RiceID', '')   “INT008” – Value is stored in OIC lookup “XX[Anonymized Customer]CommonLookup” and will be fetched based on the value of IntegrationCode variable from AssignGlobalVariables Source value. |
-| ErrNotifyEmail | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup','IntegrationCode', $IntegrationCode, 'FailureNotify', '')  This value will be fetched from OIC lookup “XX[Anonymized Customer]CommonLookup” to send failure notification, in case integration fails due to any error. |
-| SuccessNotifyEmail | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup','IntegrationCode', $IntegrationCode, 'SuccessNotify', '')  This value will be fetched from OIC lookup “XX[Anonymized Customer]CommonLookup” to send Success notification after normal process completion. |
-| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '')  This value will be fetched from OIC lookup ““XX[Anonymized Customer]ConstantLookup” which is used to send notification email from OIC service. |
+| IntegrationID | String | dvm:lookupValue('XXDominoCommonLookup', 'IntegrationCode', $IntegrationCode, 'RiceID', '')   “INT008” – Value is stored in OIC lookup “XXDominoCommonLookup” and will be fetched based on the value of IntegrationCode variable from AssignGlobalVariables Source value. |
+| ErrNotifyEmail | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', $IntegrationCode, 'FailureNotify', '')  This value will be fetched from OIC lookup “XXDominoCommonLookup” to send failure notification, in case integration fails due to any error. |
+| SuccessNotifyEmail | String | dvm:lookupValue('XXDominoCommonLookup','IntegrationCode', $IntegrationCode, 'SuccessNotify', '')  This value will be fetched from OIC lookup “XXDominoCommonLookup” to send Success notification after normal process completion. |
+| EmailFrom | String | dvm:lookupValue('XxDominoConstantLookup', 'ID', 'FromEmailId', 'Value', '')  This value will be fetched from OIC lookup ““XXDominoConstantLookup” which is used to send notification email from OIC service. |
 | checkEssJobStatus | String | NULL |
 
 ---
@@ -333,4 +333,9 @@ With map activity, process will map the below values to common error handler Int
 | ErrMsg | NULL |
 | EmailFrom | $EmailFrom |
 | SuccessNotifyEmail | $SuccessNotifyEmail |
-| EmailSub | concat("FYI",":","SUCCESS",":",$self/n
+| EmailSub | concat("FYI",":","SUCCESS",":",$self/nsmpr4:metadata/nsmpr4:integration/nsmpr4:name,"(",$self/nsmpr4:metadata/nsmpr4:integration/nsmpr4:version,")",":",$self/nsmpr4:metadata/nsmpr4:runtime/nsmpr4:instanceId ) |
+| Logging | Y |
+
+---
+
+- Default Handler: This step is there to capture

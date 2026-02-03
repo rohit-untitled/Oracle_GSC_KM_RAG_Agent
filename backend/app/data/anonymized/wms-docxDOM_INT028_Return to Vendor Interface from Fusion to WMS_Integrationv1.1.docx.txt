@@ -255,9 +255,9 @@ XxScmRTVErpToWms
 **Table:**
 
 | Variable name | Data type | Value |
-| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationName',$self/ns1:metadata/ns1:integration/ns1:name, 'IntegrationCode', '') This value will be fetched from OIC lookup “XX[Anonymized Customer]ConstantLookup”. |
+| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationName',$self/ns1:metadata/ns1:integration/ns1:name, 'IntegrationCode', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup”. |
 | Var_CompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', 'DE_M05', 'WMS_Company_Code', '') This value will be fetched from OIC lookup ”XX[Anonymized Customer]WmsCompanyLookup”. |
-| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') This value will be fetched from OIC lookup ““XX[Anonymized Customer]ConstantLookup” which is used to send notification email from OIC service. |
+| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup” which is used to send notification email from OIC service. |
 | Var_InstanceName | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'InstanceName', 'Value', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup” |
 
 ---
@@ -268,9 +268,9 @@ XxScmRTVErpToWms
 **Table:**
 
 | Variable name | Data type | Value |
-| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationName',$self/ns1:metadata/ns1:integration/ns1:name, 'IntegrationCode', '') This value will be fetched from OIC lookup “XX[Anonymized Customer]ConstantLookup”. |
+| IntegrationCode | String | dvm:lookupValue('XX[Anonymized Customer]CommonLookup', 'IntegrationName',$self/ns1:metadata/ns1:integration/ns1:name, 'IntegrationCode', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup”. |
 | Var_CompanyCode | String | dvm:lookupValue('XX[Anonymized Customer]WmsCompanyLookup', 'Organization', 'DE_M05', 'WMS_Company_Code', '') This value will be fetched from OIC lookup ”XX[Anonymized Customer]WmsCompanyLookup”. |
-| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') This value will be fetched from OIC lookup ““XX[Anonymized Customer]ConstantLookup” which is used to send notification email from OIC service. |
+| EmailFrom | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'FromEmailId', 'Value', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup” which is used to send notification email from OIC service. |
 | Var_InstanceName | String | dvm:lookupValue('Xx[Anonymized Customer]ConstantLookup', 'ID', 'InstanceName', 'Value', '') This value will be fetched from OIC lookup “Xx[Anonymized Customer]ConstantLookup” |
 
 ---
@@ -337,4 +337,4 @@ Figure: Main flow code snippet
 - The global fault handler is responsible for the whole execution scope and process the exceptions occurred in the individual stages.
 - InvokeErrorHandler:
 - The global fault handler will invoke the local integration “XxCommonNotificationHandler” which captures the error occurred at any step in overall integration flow and notify it over the email.
-- Using the map activity “Map to InvokeCommonErrorHandler”, process would map the below
+- Using the map activity “Map to InvokeCommonErrorHandler”, process would map the below values required

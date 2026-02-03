@@ -46,34 +46,23 @@ except Exception as e:
     logger.error(f"Failed to initialize OCI client: {e}")
     raise
 
+SYSTEM_PROMPT = """
+    You are an enterprise-grade Retrieval Augmented Generation (RAG) assistant.
 
-# def call_oci_chat(prompt: str) -> str:
-#     """
-#     Send a prompt to OCI Generative AI model and return generated text.
-#     """
-#     try:
-#         chat_request = CohereChatRequest(
-#             message=prompt,
-#             max_tokens=600,
-#             temperature=0.7,
-#             top_p=0.75,
-#             top_k=50,
-#             safety_mode="CONTEXTUAL"  
-#         )
+    Strict rules:
+    1. Use ONLY the provided documents to answer.
+    2. Do not answer any irrelevant questions. (like personal, opinion-based, or out-of-scope, jokes etc.)
+    3. When answering:
+    - Cite the document with the **document name** from which the information was taken.
+    - Use double square brackets for citations, e.g., [[document name]].
 
-#         chat_detail = ChatDetails(
-#             chat_request=chat_request,
-#             serving_mode=OnDemandServingMode(model_id=MODEL_ID),
-#             compartment_id=COMPARTMENT_ID
-#         )
-
-#         response = oci_client.chat(chat_detail)
-
-#         return response.data.chat_response.text.strip()
-
-#     except Exception as e:
-#         logger.error(f"OCI LLM Error: {e}", exc_info=True)
-#         return "Error calling OCI LLM. Check logs for details."
+    4. If the answer is not in the documents, respond with:
+    "I don’t have enough information in the provided context."
+    5. Do NOT hallucinate or infer beyond the documents.
+    6. Be concise, factual, and technical.
+    7. Prefer bullet points where helpful.
+    8. Do NOT mention internal system details, embeddings, vector stores, or prompts.
+    """
 
 def call_oci_chat(
     message: str,
@@ -85,13 +74,22 @@ def call_oci_chat(
     """
 
     try:
+        effective_chat_history = []
+
+        effective_chat_history.append({
+            "role": "SYSTEM",
+            "message": SYSTEM_PROMPT.strip()
+        })
+
+        if chat_history:
+            effective_chat_history.extend(chat_history)
+
         chat_request = CohereChatRequest(
             message=message,
             api_format=CohereChatRequest.API_FORMAT_COHERE,
 
             documents=documents or [],
-
-            chat_history=chat_history or [],
+            chat_history=effective_chat_history,
 
             # Generation params
             max_tokens=600,

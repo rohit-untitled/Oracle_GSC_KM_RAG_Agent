@@ -3,4 +3,6 @@
 backend/__pycache__/
 backend/app/__pycache__/
 backend/app/services/__pycache__/
+backend/app/data/
 backend/venv/
+test.py

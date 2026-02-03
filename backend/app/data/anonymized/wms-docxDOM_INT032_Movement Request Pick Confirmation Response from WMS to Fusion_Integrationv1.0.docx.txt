@@ -25,7 +25,7 @@
 ---
 **Table:**
 
-| Date | Reviewer | Role |
+| Date | reviewer | role |
 | 04-Jun-2024 | [Anonymized Customer] | Technical Lead |
 |  |  |  |
 |  |  |  |
@@ -38,25 +38,22 @@
 ## Purpose
 
 This Design Specification documents details the design for Movement Request pick confirmation interface from Oracle Cloud WMS to Fusion.
-This document describes the functional design of the list of attributes which need to be interfaced from Oracle Cloud WMS to Fusion through Oracle Integrated Cloud Service (OIC) to pick confirm and close the movement request lines Fusion. The design document also covers the event attribute mappings from Oracle Cloud WMS to Fusion Functional Columns.
+This document describes the functional design of the list of attributes which need to be interfaced from Oracle Cloud WMS to Fusion through Oracle Integrated Cloud Service (OIC) to pick confirm and close the movement request lines Fusion. The design document also covers the event attribute mappings from Oracle Cloud WMS  to Fusion Functional Columns.
 
 ## Overview and Scope
 
-**Overview**
+Overview
 Movement requests are requests for the movement of material within an inventory organization such as a warehouse or facility.
 These types of movement requests exist:
 - Replenishment movement requests
 - Shop floor movement requests
 The movement request is then completed (picked and moved) in WMS and this triggers a Pick confirmation record which is communicated back to Fusion inventory to complete the picking action against the Movement request.
-
-**Business Purpose**
+Business Purpose
 Movement Request transaction enables to perform the complete process required to request movement of material, physically move material, and confirm physical movement of material. Hence, a specific interface needs to be built between Oracle Cloud WMS and Fusion as per the Business Requirement to keep movement request intact between the two systems.
 This design document focuses on building an interface between Oracle Cloud WMS and Fusion so that movement requests are updated without any issues.
-
-**Scope**
+Scope
 The scope of this document is limited to functional design of the interface pick confirmation for movement requests from Oracle Cloud WMS to Fusion.
-
-**Functional Overview**
+Functional Overview
 Fusion Movement Request is a source for all movement requests published to WMS. These movement requests will be interfaced to WMS for different use cases.
 - Min-Max replenishment process in Fusion will trigger a movement request in WMS to move material to [Anonymized Customer] lineside locations.
 - Manual Movement Request
@@ -111,7 +108,7 @@ The below picture depicts the general steps for the pick confirmation of movemen
 ---
 **Table:**
 
-| Risk | Impact (1 to 5) | Probability (1 to 5) | Mitigation |
+| Risk | Impact  (1 to 5) | Probability (1 to 5) | Mitigation |
 | Movement Request Interface Failure to WMS due to missing item in WMS | 5 | 2 | Valid error message stating the integration failure. Re-run the movement request integration |
 | Movement Request Interface Failure to WMS due to missing item movement request type in WMS | 5 | 2 | Configure the movement request type in WMS and then Re-run the movement request integration |
 | Movement request pick confirmation response failure from WMS | 5 | 1 | Check if the schedule job in WMS is enabled. |
@@ -123,7 +120,7 @@ The below picture depicts the general steps for the pick confirmation of movemen
 ---
 **Table:**
 
-| Name | Dependency | Comments |
+| Name | Dependency | comments |
 | INT001: Item Interface to WMS |  | Items against which the movement request is created should exist in WMS |
 | INT031: Movement Request Interface Failure to WMS due to missing item in WMS |  | Valid error message stating the integration failure. Re-run the movement request integration |
 | INT031: Movement Request Interface Failure to WMS due to missing item movement request type in WMS |  | Configure the movement request type in WMS and then Re-run the movement request integration |
@@ -159,7 +156,7 @@ This section is used to summarize any open items related to the design.
 ---
 **Table:**
 
-| No. | Open Item | Data Required/Owner | Status | Impact if not closed |
+| No. | open item | data required/Owner | status | impact if not closed |
 | 001 | Serial number reservation against a movement request | [Anonymized Customer] | Feature to be released in release 24B |  |
 | 002 |  |  |  |  |
 | 003 |  |  |  |  |
@@ -182,9 +179,9 @@ The objective of this section is to provide [Anonymized Customer] with a Technic
 | Annotation | Definition |
 | ERP | Enterprise Resource Planning |
 | SCM | Supply Chain Management |
-| OIC | Oracle Integration Cloud |
+| OIC | Oracle integration cloud |
 | API | Application Programming Interface |
-| SaaS | Software as a Service |
+| SaaS | Software as a service |
 | PaaS | Platform as a Service |
 | BI Publisher | Business Intelligence Publisher |
 | UCM | Universal Content Management |
@@ -205,7 +202,7 @@ The objective of this section is to provide [Anonymized Customer] with a Technic
 ---
 **Table:**
 
-| Ref No | Name | File Location |
+| Ref No | Name | File location |
 |  |  |  |
 |  |  |  |
 |  |  |  |
@@ -222,20 +219,20 @@ The objective of this section is to provide [Anonymized Customer] with a Technic
 
 - WMS will provide the Payload which contains the Movement Request details.
 - The Pick Slip will be generated for the Movement Request in Fusion.
-- The Pick Slip generated for the MR will get confirmed in Fusion.
+- The Pick Slip generated for the MR will get confirm in Fusion.
 
 ### High Level Flow Diagram
 
 ### Pre-Requisites
 
-Send Email Integration “XxCommonNotificationHandler” should be deployed in the OIC.
-Lookup “XXDominoCommonLookup” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
-Lookup “XxDominoConstantLookup” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
-Lookup “XxDominoWmsSubInvLookup” should be present in OIC.
+Send Email Integration “[Anonymized Customer]” should be deployed in the OIC.
+Lookup “[Anonymized Customer]” should be present with all the required details regarding success/error email notify flag, success and error notify ToEmail Address in OIC.
+Lookup “[Anonymized Customer]” should be present with all the required details regarding success and error notify FromEmail Address in OIC.
+Lookup “[Anonymized Customer]” should be present in OIC.
 
 # Integration Analysis –
 
-**XxPickSlipConfirmationWmsToErp**
+[Anonymized Customer]
 This Integration component is responsible for communicating Pick Slip confirmation to Fusion Inventory sent by WMS system.
 
 ### Integration Components
@@ -246,7 +243,7 @@ Below are the required components for this integration.
 **Table:**
 
 | Integration Name | Integration Pattern | Package Name | Lookup Name |
-| XxPickSlipConfirmationWmsToErp | App Driven Orchestration |  | XXDominoCommonLookup, XxDominoWmsSubInvLookup |
+| [Anonymized Customer] | App Driven Orchestration |  | [Anonymized Customer], [Anonymized Customer] |
 
 ---
 
@@ -256,24 +253,24 @@ Below are the required components for this integration.
 **Table:**
 
 | Connection Name | Connection Type | Connection Role |
-| XxDominoWMSConnection | REST | Trigger and invoke |
-| XxDominoErpRestConnection_WMSINT | REST | Trigger |
-| XxDominoBIReportConnection_WMSINT | SOAP | Trigger and invoke |
-| XxDominoErpCloudConnection_WMSINT | REST | Trigger and invoke |
-| XxOicRestTrigger | REST | Trigger |
+| [Anonymized Customer] | REST | Trigger and invoke |
+| [Anonymized Customer] | REST | Trigger |
+| [Anonymized Customer] | SOAP | Trigger and invoke |
+| [Anonymized Customer] | REST | Trigger and invoke |
+| [Anonymized Customer] | REST | Trigger |
 
 ---
 
 ### Integration Outline
 
-**XxPickSlipConfirmationWmsToErp**
-- postPickSlipOperation: It uses Rest adapter to fetch the Movement Request related information from WMS.
-- ForEachInventoryHistory: This loop will find the distinct Movement Request in the payload received from WMS.
-- RunPickSlipReport: This will generate the Pick Slip Number for the Movement Request.
-- Whil1: It will wait until the ESS job will complete.
-- RunReport: The BIP Report will fetch the Pick Slip number details from the Fusion.
-- getLocatorDetails: This API will find the locator details of the item from the WMS.
-- CallPickSlipConfirmation: The Pick Slip will be confirmed in Fusion against the movement Request received from WMS.
+[Anonymized Customer]
+- postPickSlipOperation : It uses Rest adapter to fetch the Movement Request related information from WMS.
+- ForEachInventoryHistory :- This loop will find the distinct Movement Request in the payload received from WMS.
+- RunPickSlipReport :- This will generate the Pick Slip Number for the Movement Request.
+- Whil1 :- It will wait until the ESS job will complete.
+- RunReport :- The BIP Report will fetch the Pick Slip number details from the  Fusion.
+- getLocatorDetails :- This API will find the locator details of the item from the WMS.
+- CallPickSlipConfirmation :- The Pick Slip will be confirmed in Fusion against the movement Request received from WMS.
 
 ### Main Flow Code Snippet
 
@@ -283,25 +280,25 @@ Figure: Main flow code snippet
 
 - The global fault handler is responsible for the whole execution scope and process the exceptions occurred in the individual stages.
 - InvokeErrorNotify:
-- The global fault handler will invoke the local integration “XxCommonNotificationHandler” which captures the error occurred at any step in overall integration flow and notify it over the email.
+- The global fault handler will invoke the local integration “[Anonymized Customer]” which captures the error occurred at any step in overall integration flow and notify it over the email.
 
 ### Migration Steps
 
-- Import “XXPICKSLIPCONFIRMATIONWMSTOERP_02.00.0003.iar” in OIC environment.
+- Import “[Anonymized Customer]” in OIC environment.
 - Update the OIC Connections with Password, details as per the Environment.
-- Validate the "XxCommonNotificationHandler", which is deployed in OIC.
-- Configure the Connection with Dev Instance URL, Instance Name (whenever updated) which is present in “Domino Constant lookup maintained in OIC.
+- Validate the "[Anonymized Customer]", which is deployed in OIC.
+- Configure the Connection with Dev Instance URL, Instance Name (whenever updated) which is present in “[Anonymized Customer]” maintained in OIC.
 - Complete the OIC integration configuration and activate OIC service.
 
 # Open and Closed Issues
 
-This section is used to summarize any open and closed questions relating to Error Handler
+This section is used to summaries any open and closed questions relating to Error Handler
 
 ---
 **Table:**
 
 | ID | Topic | Description | Status | Owner |
 | 1 |  |  |  |  |
-| 2 |  |  |  |  |
+| 2. |  |  |  |  |
 
 ---
