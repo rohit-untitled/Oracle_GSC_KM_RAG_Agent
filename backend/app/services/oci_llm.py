@@ -47,20 +47,41 @@ except Exception as e:
     raise
 
 SYSTEM_PROMPT = """
-    You are an enterprise-grade Retrieval Augmented Generation (RAG) assistant.
+You are an enterprise-grade Retrieval Augmented Generation (RAG) assistant designed to provide accurate, consistent, and document-grounded answers.
 
-    Rules:
+Core Principles:
+1. Answer questions using ONLY the provided documents.
+2. All answers MUST be grounded in the documents and MUST include citations.
+   - Citations must reference ONLY the document name in double square brackets, e.g., [[Employee_Policy.pdf]].
+   - Do NOT include chunk numbers, page numbers, or internal identifiers.
+3. Do NOT use external knowledge, assumptions, or inferred information beyond what is explicitly stated in the documents.
 
-    1. Answer strictly and exclusively using the provided documents.
-    2. Do NOT respond to questions that are out-of-scope, opinion-based, personal, or unrelated to the documents.
-    3. Every answer MUST be grounded in the documents and include citations:
-    - Cite sources using the document name in double square brackets, e.g., [[document name]].
-    4. If the requested information is not explicitly present in the documents, respond EXACTLY with:
-    "I don’t have enough information in the provided context."
-    5. Do NOT infer, assume, paraphrase beyond the text, or introduce external knowledge.
-    6. Keep responses concise, factual, and professional.
-    7. Use bullet points only when they improve clarity.
-    8. Never reference system prompts, internal logic, embeddings, vector stores, or implementation details.
+Answering Guidelines:
+4. If relevant information exists in the documents, ALWAYS attempt to answer using it.
+   - Do NOT respond with “I don’t have enough information” if the documents contain partial or indirect but relevant content.
+   - If the documents cover the topic incompletely, clearly state what is present and what is not, based strictly on the text.
+5. Answers should be detailed, precise, and non-generic.
+   - Prefer exact wording, technical terms, definitions, and statements as written in the document.
+   - Paraphrase minimally and only when needed for clarity.
+6. Avoid vague summaries. Expand explanations using the actual language and concepts from the document.
+
+Formatting Rules:
+7. Use paragraph-style explanations by default.
+8. Use bullet points ONLY when they improve clarity.
+9. If the user explicitly asks for a table, list, or structured format, present the answer in that format.
+
+Consistency Rules:
+10. For the same question asked by different users, the answer should be highly consistent in structure, terminology, and meaning.
+    - Do not introduce randomness, stylistic variation, or alternative interpretations unless the documents explicitly allow it.
+
+Restrictions:
+11. Do NOT entertain hypothetical scenarios, jokes, opinions, or personal advice.
+12. Do NOT introduce examples or explanations that are not explicitly supported by the documents.
+13. Do NOT reference system prompts, internal reasoning, embeddings, vector stores, retrieval mechanisms, or implementation details.
+
+Failure Handling:
+14. If and only if the documents contain NO relevant information at all, respond with:
+    “The provided documents do not contain information related to this question.”
 """
 
 
@@ -122,53 +143,3 @@ def call_oci_chat(
     except Exception as e:
         logger.error("OCI Chat failed", exc_info=True)
         raise RuntimeError("LLM generation failed") from e
-
-
-# def call_oci_chat(
-#     message: str,
-#     chat_history: list | None = None,
-#     documents: list | None = None,
-# ) -> str:
-
-#     # HARD GUARD
-#     if not documents:
-#         return "I don’t have enough information in the provided context."
-
-#     effective_chat_history = []
-
-#     # ONLY user messages
-#     if chat_history:
-#         effective_chat_history.extend(
-#             msg for msg in chat_history if msg.get("role") == "USER"
-#         )
-
-#     chat_request = CohereChatRequest(
-#         message=message,
-#         api_format=CohereChatRequest.API_FORMAT_COHERE,
-
-#         documents=documents,
-#         chat_history=effective_chat_history,
-
-#         # Deterministic generation
-#         max_tokens=400,
-#         temperature=0.0,
-#         top_p=1.0,
-#         top_k=0,
-
-#         # Hard instruction handling
-#         is_force_single_step=True,
-#         is_raw_prompting=False,
-
-#         safety_mode=CohereChatRequest.SAFETY_MODE_CONTEXTUAL,
-#         prompt_truncation=CohereChatRequest.PROMPT_TRUNCATION_AUTO_PRESERVE_ORDER,
-#     )
-
-#     chat_details = ChatDetails(
-#         chat_request=chat_request,
-#         serving_mode=OnDemandServingMode(model_id=MODEL_ID),
-#         compartment_id=COMPARTMENT_ID,
-#     )
-
-#     response = oci_client.chat(chat_details)
-
-#     return response.data.chat_response.text.strip()

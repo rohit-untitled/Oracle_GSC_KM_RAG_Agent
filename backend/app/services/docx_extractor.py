@@ -31,6 +31,49 @@ def ocr_image(image_path):
         print(f"Skipping unreadable image {image_path}: {e}")
         return ""
 
+def _normalize_ocr_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip())
+
+
+def _save_image_part(img_part, image_dir: str, img_index: int) -> str:
+    partname = str(img_part.partname)
+    ext = os.path.splitext(partname)[1] if partname else ""
+    if not ext:
+        ext = ".png"
+    img_name = f"img_{img_index}{ext}"
+    img_path = os.path.join(image_dir, img_name)
+    with open(img_path, "wb") as f:
+        f.write(img_part.blob)
+    return img_path
+
+
+def _extract_images_from_paragraphs(paragraphs, rels, image_dir, img_counter):
+    ocr_texts = []
+
+    for paragraph in paragraphs:
+        for run in paragraph.runs:
+            blips = run.element.xpath(".//a:blip")
+            if not blips:
+                continue
+
+            for blip in blips:
+                embed_id = blip.get(
+                    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
+                )
+
+                if not embed_id or embed_id not in rels:
+                    continue
+
+                img_part = rels[embed_id].target_part
+                img_path = _save_image_part(img_part, image_dir, img_counter[0])
+                img_counter[0] += 1
+
+                ocr_text = ocr_image(img_path)
+                if ocr_text.strip():
+                    ocr_texts.append(_normalize_ocr_text(ocr_text))
+
+    return ocr_texts
+
 
 def extract_text_with_formatting_in_sequence(docx_path, image_dir="temp_docx_images_seq"):
     """
@@ -51,6 +94,7 @@ def extract_text_with_formatting_in_sequence(docx_path, image_dir="temp_docx_ima
 
     rels = doc.part.rels
     para_index = 0
+    img_counter = [0]
 
     for block in tqdm(doc.element.body.iterchildren(), desc=f"Extracting: {os.path.basename(docx_path)}", ncols=100):
 
@@ -59,8 +103,12 @@ def extract_text_with_formatting_in_sequence(docx_path, image_dir="temp_docx_ima
             paragraph = doc.paragraphs[para_index]
             para_index += 1
 
+            image_texts = _extract_images_from_paragraphs(
+                [paragraph], rels, image_dir, img_counter
+            )
+
             text = paragraph.text.strip()
-            if not text:
+            if not text and not image_texts:
                 continue
 
             style_name = paragraph.style.name.lower()
@@ -77,36 +125,13 @@ def extract_text_with_formatting_in_sequence(docx_path, image_dir="temp_docx_ima
 
             # Normal paragraph
             else:
-                formatted_output.append(text)
+                if text:
+                    formatted_output.append(text)
 
-            # Inline images inside runs
-            for run in paragraph.runs:
-                blips = run.element.xpath(".//a:blip")
-                if not blips:
-                    continue
-
-                for blip in blips:
-                    embed_id = blip.get(
-                        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
-                    )
-
-                    if not embed_id or embed_id not in rels:
-                        continue
-
-                    img_part = rels[embed_id].target_part
-                    img_data = img_part.blob
-
-                    img_name = f"inline_img_{len(formatted_output)}.png"
-                    img_path = os.path.join(image_dir, img_name)
-                    with open(img_path, "wb") as f:
-                        f.write(img_data)
-
-                    ocr_text = ocr_image(img_path)
-
-                    if ocr_text.strip():
-                        formatted_output.append(
-                            f"\n📷 **Image Text:**\n> {ocr_text.strip()}\n"
-                        )
+            for ocr_text in image_texts:
+                formatted_output.append(
+                    f"\n**Image Text:**\n> {ocr_text}\n"
+                )
 
         # 2. TABLE
         elif block.tag.endswith("tbl"):
@@ -120,7 +145,17 @@ def extract_text_with_formatting_in_sequence(docx_path, image_dir="temp_docx_ima
 
             formatted_output.append("\n---\n**Table:**\n")
             for row in table.rows:
-                cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+                cells = []
+                for cell in row.cells:
+                    cell_text = cell.text.strip().replace("\n", " ")
+                    cell_image_texts = _extract_images_from_paragraphs(
+                        cell.paragraphs, rels, image_dir, img_counter
+                    )
+                    if cell_image_texts:
+                        if cell_text:
+                            cell_text += " "
+                        cell_text += "Image Text: " + " / ".join(cell_image_texts)
+                    cells.append(cell_text)
                 formatted_output.append("| " + " | ".join(cells) + " |")
             formatted_output.append("\n---\n")
 

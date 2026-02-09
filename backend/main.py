@@ -9,6 +9,7 @@ import logging
 import asyncio
 import json
 import time
+import hashlib
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, conint
 from typing import List, Optional
@@ -18,7 +19,7 @@ from app.services.document_loader import load_docx_files
 from app.services.docx_extractor import extract_text_with_formatting_in_sequence
 from app.services.document_chunker import chunk_documents
 from app.services.chunk_service import chunk_anonymized_documents
-from app.services.anonymize_service import anonymize_documents
+from app.services.anonymize_service import anonymize_markdown_files
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.rag_service import answer_query, ai_redact_sensitive_info
 from app.services.vector_store_service import insert_embeddings_from_json
@@ -49,6 +50,13 @@ def get_docs_folder() -> str:
         "downloads"
     )
 
+def get_extracted_folder() -> str:
+    return os.path.join(
+        os.path.dirname(__file__),
+        "app",
+        "data",
+        "extracted"
+    )
 @app.get("/")
 def root():
     return {"message": "AI Redaction Agent is running!"}
@@ -85,6 +93,13 @@ def load_docs():
 def extract_docs():
     folder = get_docs_folder()
     docs = load_docx_files(folder)
+    output_dir = os.path.join(
+        os.path.dirname(__file__),
+        "app",
+        "data",
+        "extracted"
+    )
+    os.makedirs(output_dir, exist_ok=True)
 
     result = {}
     for doc in docs:
@@ -94,14 +109,21 @@ def extract_docs():
             text = f"Error extracting: {e}"
 
         result[os.path.basename(doc["file_path"])] = text
+        base_name = os.path.splitext(os.path.basename(doc["file_path"]))[0]
+        out_path = os.path.join(output_dir, f"{base_name}.md")
+        try:
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(text)
+        except Exception as e:
+            result[os.path.basename(doc["file_path"])] = f"Error writing file: {e}"
 
     return result
 
 
 @app.get("/anonymize-docs")
 def anonymize_docs():
-    folder = get_docs_folder()
-    return anonymize_documents(folder)
+    extracted_dir = get_extracted_folder()
+    return anonymize_markdown_files(extracted_dir)
 
 @app.get("/chunk-anonymized")
 def chunk_anonymized():
@@ -139,12 +161,44 @@ def embed_chunks():
         return {"error": "Failed to load chunks.json"}
 
     output = []
+    existing = {}
+
+    if os.path.exists(output_path):
+        try:
+            with open(output_path, "r", encoding="utf-8") as f:
+                previous = json.load(f)
+            for item in previous:
+                cid = item.get("chunk_id")
+                if cid and item.get("embedding"):
+                    existing[cid] = item
+        except Exception as e:
+            logger.warning(f"Failed to load existing embeddings for resume: {e}")
 
     # ---- Summary tracking ----
     total_chunks = len(chunks)
     successful = 0
     empty_vectors = 0
     split_depth_counts = {}   # {depth: count}
+
+    batch_texts = []
+    batch_meta = []
+
+    def _flush_batch():
+        nonlocal batch_texts, batch_meta, output, successful, empty_vectors, split_depth_counts
+        if not batch_texts:
+            return
+        vectors = embedder.embed_texts(batch_texts)
+        for (idx, ch, cid), emb in zip(batch_meta, vectors):
+            if not emb:
+                logger.error(f"[Chunk {idx}] Empty vector returned")
+                empty_vectors += 1
+                ch["embedding"] = []
+            else:
+                successful += 1
+                ch["embedding"] = emb
+            output.append(ch)
+        batch_texts = []
+        batch_meta = []
 
     for idx, ch in enumerate(chunks, start=1):
         text = ch.get("chunk", "").strip()
@@ -156,29 +210,65 @@ def embed_chunks():
             output.append(ch)
             continue
 
+        source_key = ch.get("source_file", "") + "|" + str(ch.get("chunk_index", idx))
+        cid = hashlib.sha256((source_key + "|" + text).encode("utf-8")).hexdigest()
+        ch["chunk_id"] = cid
+
+        if cid in existing:
+            output.append(existing[cid])
+            continue
+
+        batch_texts.append(text)
+        batch_meta.append((idx, ch, cid))
+
+        if len(batch_texts) >= 16:
+            try:
+                _flush_batch()
+            except Exception as e:
+                logger.error(f"Batch embedding failed: {e}")
+                # Fallback to per-item
+                for (i2, ch2, _) in batch_meta:
+                    try:
+                        emb, depth = embedder.embed_text(ch2.get("chunk", ""), return_depth=True)
+                        if depth not in split_depth_counts:
+                            split_depth_counts[depth] = 0
+                        split_depth_counts[depth] += 1
+                        if not emb:
+                            empty_vectors += 1
+                            ch2["embedding"] = []
+                        else:
+                            successful += 1
+                            ch2["embedding"] = emb
+                    except Exception as e2:
+                        logger.error(f"Exception while embedding chunk {i2}: {e2}")
+                        ch2["embedding"] = []
+                        empty_vectors += 1
+                    output.append(ch2)
+                batch_texts = []
+                batch_meta = []
+
+    if batch_texts:
         try:
-            # ---- Get embedding + depth info ----
-            emb, depth = embedder.embed_text(text, return_depth=True)
-
-            # Track depth usage
-            if depth not in split_depth_counts:
-                split_depth_counts[depth] = 0
-            split_depth_counts[depth] += 1
-
-            if not emb:
-                logger.error(f"[Chunk {idx}] Empty vector returned")
-                empty_vectors += 1
-            else:
-                successful += 1
-
-            ch["embedding"] = emb
-
+            _flush_batch()
         except Exception as e:
-            logger.error(f"Exception while embedding chunk {idx}: {e}")
-            ch["embedding"] = []
-            empty_vectors += 1
-
-        output.append(ch)
+            logger.error(f"Final batch embedding failed: {e}")
+            for (i2, ch2, _) in batch_meta:
+                try:
+                    emb, depth = embedder.embed_text(ch2.get("chunk", ""), return_depth=True)
+                    if depth not in split_depth_counts:
+                        split_depth_counts[depth] = 0
+                    split_depth_counts[depth] += 1
+                    if not emb:
+                        empty_vectors += 1
+                        ch2["embedding"] = []
+                    else:
+                        successful += 1
+                        ch2["embedding"] = emb
+                except Exception as e2:
+                    logger.error(f"Exception while embedding chunk {i2}: {e2}")
+                    ch2["embedding"] = []
+                    empty_vectors += 1
+                output.append(ch2)
 
     # ---- Save final embeddings ----
     try:
@@ -236,7 +326,6 @@ class RAGRequest(BaseModel):
 
 @app.get("/session-history")
 def session_history_api(session_id: str):
-    # session_history comes from rag_service.py
     from app.services.rag_service import session_history
     return session_history.get(session_id, [])
 
