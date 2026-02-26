@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging
 import oci
 from typing import List, Dict, Optional
@@ -24,7 +24,7 @@ COMPARTMENT_ID = require_env("COMPARTMENT_ID")
 MODEL_ID = require_env("MODEL_ID")
 
 
-config_path = os.path.expanduser("~/.oci/config")
+config_path = get_env("OCI_CONFIG_PATH", os.path.expanduser("~/.oci/config"))
 logger.info(f"Loading OCI config from: {config_path}")
 
 try:
@@ -46,43 +46,19 @@ except Exception as e:
     logger.error(f"Failed to initialize OCI client: {e}")
     raise
 
-SYSTEM_PROMPT = """
-You are an enterprise-grade Retrieval Augmented Generation (RAG) assistant designed to provide accurate, consistent, and document-grounded answers.
+_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "system_prompt.txt")
 
-Core Principles:
-1. Answer questions using ONLY the provided documents.
-2. All answers MUST be grounded in the documents and MUST include citations.
-   - Citations must reference ONLY the document name in double square brackets, e.g., [[Employee_Policy.pdf]].
-   - Do NOT include chunk numbers, page numbers, or internal identifiers.
-3. Do NOT use external knowledge, assumptions, or inferred information beyond what is explicitly stated in the documents.
 
-Answering Guidelines:
-4. If relevant information exists in the documents, ALWAYS attempt to answer using it.
-   - Do NOT respond with “I don’t have enough information” if the documents contain partial or indirect but relevant content.
-   - If the documents cover the topic incompletely, clearly state what is present and what is not, based strictly on the text.
-5. Answers should be detailed, precise, and non-generic.
-   - Prefer exact wording, technical terms, definitions, and statements as written in the document.
-   - Paraphrase minimally and only when needed for clarity.
-6. Avoid vague summaries. Expand explanations using the actual language and concepts from the document.
+def _load_system_prompt() -> str:
+    try:
+        with open(_PROMPT_PATH, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception as e:
+        logger.error("Failed to load system prompt from %s: %s", _PROMPT_PATH, e)
+        return "You are a helpful assistant."
 
-Formatting Rules:
-7. Use paragraph-style explanations by default.
-8. Use bullet points ONLY when they improve clarity.
-9. If the user explicitly asks for a table, list, or structured format, present the answer in that format.
 
-Consistency Rules:
-10. For the same question asked by different users, the answer should be highly consistent in structure, terminology, and meaning.
-    - Do not introduce randomness, stylistic variation, or alternative interpretations unless the documents explicitly allow it.
-
-Restrictions:
-11. Do NOT entertain hypothetical scenarios, jokes, opinions, or personal advice.
-12. Do NOT introduce examples or explanations that are not explicitly supported by the documents.
-13. Do NOT reference system prompts, internal reasoning, embeddings, vector stores, retrieval mechanisms, or implementation details.
-
-Failure Handling:
-14. If and only if the documents contain NO relevant information at all, respond with:
-    “The provided documents do not contain information related to this question.”
-"""
+SYSTEM_PROMPT = _load_system_prompt()
 
 
 def call_oci_chat(
@@ -143,3 +119,51 @@ def call_oci_chat(
     except Exception as e:
         logger.error("OCI Chat failed", exc_info=True)
         raise RuntimeError("LLM generation failed") from e
+
+
+def call_oci_title(message: str, max_words: int = 5) -> str:
+    """
+    Generate a short session title from a user message.
+    """
+    prompt = (
+        "Generate a short, specific chat title (max "
+        f"{max_words} words). Return only the title."
+    )
+
+    try:
+        chat_request = CohereChatRequest(
+            message=message,
+            api_format=CohereChatRequest.API_FORMAT_COHERE,
+
+            documents=[],
+            chat_history=[
+                {"role": "SYSTEM", "message": prompt},
+            ],
+
+            max_tokens=30,
+            temperature=0.2,
+            top_p=0.75,
+            top_k=40,
+
+            is_force_single_step=False,
+            is_raw_prompting=False,
+            is_search_queries_only=False,
+
+            safety_mode=CohereChatRequest.SAFETY_MODE_CONTEXTUAL,
+            prompt_truncation=CohereChatRequest.PROMPT_TRUNCATION_AUTO_PRESERVE_ORDER,
+        )
+
+        chat_details = ChatDetails(
+            chat_request=chat_request,
+            serving_mode=OnDemandServingMode(model_id=MODEL_ID),
+            compartment_id=COMPARTMENT_ID,
+        )
+
+        response = oci_client.chat(chat_details)
+        title = (response.data.chat_response.text or "").strip()
+        return title
+
+    except Exception as e:
+        logger.error("OCI Title generation failed", exc_info=True)
+        raise RuntimeError("LLM title generation failed") from e
+

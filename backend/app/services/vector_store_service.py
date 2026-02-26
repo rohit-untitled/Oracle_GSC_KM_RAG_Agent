@@ -53,15 +53,19 @@ def get_pool() -> oracledb.ConnectionPool:
     if _pool is None:
         logger.info("Creating Oracle connection pool...")
 
-        _pool = oracledb.create_pool(
-            user=DB_USER,
-            password=DB_PASSWORD,
-            dsn=DB_TNS,
-            min=1,
-            max=10,
-            increment=1,
-            getmode=oracledb.POOL_GETMODE_WAIT,
-        )
+        pool_kwargs = {
+            "user": DB_USER,
+            "password": DB_PASSWORD,
+            "dsn": DB_TNS,
+            "min": 1,
+            "max": 10,
+            "increment": 1,
+            "getmode": oracledb.POOL_GETMODE_WAIT,
+        }
+        if WALLET_PATH:
+            pool_kwargs["config_dir"] = WALLET_PATH
+
+        _pool = oracledb.create_pool(**pool_kwargs)
 
         logger.info("Oracle connection pool created")
 
@@ -119,13 +123,14 @@ def insert_embedding_record(chunk_text: str, embedding_vector: List[float], meta
 def insert_embeddings_from_json(json_file_path: str):
     conn = get_connection()
     cur = conn.cursor()
+    cur_check = conn.cursor()
 
     with open(json_file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     sql = """
         INSERT INTO ai_vector_store (embedding, chunk, metadata)
-        VALUES (TO_VECTOR(:embedding_string), :chunk, :metadata)
+        VALUES (TO_VECTOR(:1), :2, :3)
     """
 
     skipped = 0
@@ -133,10 +138,24 @@ def insert_embeddings_from_json(json_file_path: str):
     rows = []
 
     cur.setinputsizes(
-        embedding_string=oracledb.DB_TYPE_VARCHAR,
-        chunk=oracledb.DB_TYPE_CLOB,
-        metadata=oracledb.DB_TYPE_CLOB
+        oracledb.DB_TYPE_VARCHAR,
+        oracledb.DB_TYPE_CLOB,
+        oracledb.DB_TYPE_CLOB
     )
+
+    def _chunk_exists(chunk_id: str) -> bool:
+        if not chunk_id:
+            return False
+        cur_check.execute(
+            """
+            SELECT 1
+            FROM ai_vector_store
+            WHERE JSON_VALUE(metadata, '$.chunk_id') = :1
+            FETCH FIRST 1 ROWS ONLY
+            """,
+            (chunk_id,),
+        )
+        return cur_check.fetchone() is not None
 
     for entry in data:
         emb = entry.get("embedding")
@@ -159,17 +178,22 @@ def insert_embeddings_from_json(json_file_path: str):
             "heading": entry.get("heading"),
         })
 
-        rows.append({
-            "chunk": entry.get("chunk", ""),
-            "embedding_string": embedding_string,
-            "metadata": json.dumps(metadata)
-        })
+        if _chunk_exists(metadata.get("chunk_id")):
+            skipped += 1
+            continue
+
+        rows.append((
+            embedding_string,
+            entry.get("chunk", ""),
+            json.dumps(metadata)
+        ))
         inserted += 1
 
     if rows:
         cur.executemany(sql, rows)
     conn.commit()
     cur.close()
+    cur_check.close()
     get_pool().release(conn)
 
     logger.info(f"Batch insert done — Inserted={inserted}, Skipped={skipped}")

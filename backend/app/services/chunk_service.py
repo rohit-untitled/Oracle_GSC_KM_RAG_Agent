@@ -217,18 +217,35 @@ def _chunk_blocks(
     return chunks
 
 
-def chunk_anonymized_documents(base_dir: str, max_tokens: int = 450, overlap_tokens: int = 40):
+def chunk_anonymized_documents(base_dir: str, max_tokens: int = 350, overlap_tokens: int = 30):
 
     anonymized_dir = os.path.join(base_dir, "anonymized")
     chunk_dir = os.path.join(base_dir, "chunks")
 
     os.makedirs(chunk_dir, exist_ok=True)
 
-    all_chunks = []
+    output_file = os.path.join(chunk_dir, "chunks.json")
+
+    existing_chunks: List[Dict[str, str]] = []
+    processed_sources = set()
+    if os.path.exists(output_file):
+        try:
+            with open(output_file, "r", encoding="utf-8") as f:
+                existing_chunks = json.load(f)
+            for ch in existing_chunks:
+                if ch.get("source_md"):
+                    processed_sources.add(ch["source_md"])
+        except Exception:
+            existing_chunks = []
+            processed_sources = set()
+
+    all_chunks: List[Dict[str, str]] = list(existing_chunks)
 
     # Loop through all anonymized .md files
     for filename in os.listdir(anonymized_dir):
         if not filename.lower().endswith(".md"):
+            continue
+        if filename in processed_sources:
             continue
 
         file_path = os.path.join(anonymized_dir, filename)
@@ -255,8 +272,6 @@ def chunk_anonymized_documents(base_dir: str, max_tokens: int = 450, overlap_tok
             })
 
     # Save chunks.json
-    output_file = os.path.join(chunk_dir, "chunks.json")
-
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(all_chunks, f, indent=2)
 

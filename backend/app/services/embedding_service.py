@@ -76,13 +76,15 @@ class OCIEmbeddingService:
         batch_texts: List[str] = []
         batch_indices: List[int] = []
 
+        SAFE_MAX_WORDS = 350
+
         # Pre-filter likely oversized texts to avoid batch failure
         for i, t in enumerate(cleaned):
             if not t:
                 vectors[i] = []
                 continue
             word_count = len(t.split())
-            if word_count > 450:
+            if word_count > SAFE_MAX_WORDS:
                 emb, _ = self._embed_recursive(t)
                 vectors[i] = emb
             else:
@@ -166,7 +168,7 @@ class OCIEmbeddingService:
         resp = self._embed_call_with_retry(req)
         return resp.data.embeddings
 
-    def _embed_call_with_retry(self, req: EmbedTextDetails, max_retries: int = 5):
+    def _embed_call_with_retry(self, req: EmbedTextDetails, max_retries: int = 8):
         last_err = None
         for attempt in range(max_retries + 1):
             try:

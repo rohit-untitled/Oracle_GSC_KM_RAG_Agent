@@ -10,8 +10,10 @@ import asyncio
 import json
 import time
 import hashlib
+import uuid
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, conint
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 # ---- Internal imports ----
@@ -21,10 +23,17 @@ from app.services.document_chunker import chunk_documents
 from app.services.chunk_service import chunk_anonymized_documents
 from app.services.anonymize_service import anonymize_markdown_files
 from app.services.embedding_service import OCIEmbeddingService
-from app.services.rag_service import answer_query, ai_redact_sensitive_info
+from app.services.rag_service import answer_query
+from app.services.session_store_service import (
+    fetch_session_history,
+    delete_session_history,
+    ensure_session,
+    get_session,
+    list_sessions,
+    delete_session,
+)
 from app.services.vector_store_service import insert_embeddings_from_json
 from app.services.oci_downloader import download_all_from_bucket
-from app.services.rag_service import session_history
 
 
 # ---- Logging setup ----
@@ -32,15 +41,13 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
-logger = logging.getLogger("ai_redaction_agent")
+logger = logging.getLogger("KM Knowledge Agent is Working")
 
 app = FastAPI(
     title="AI Redaction Agent",
     description="RAG-powered system for Q&A and redaction with multi-turn memory",
     version="2.0.0",
 )
-
-conversation_sessions = {}
 
 def get_docs_folder() -> str:
     return os.path.join(
@@ -57,10 +64,13 @@ def get_extracted_folder() -> str:
         "data",
         "extracted"
     )
+
+# Health check
 @app.get("/")
 def root():
     return {"message": "AI Redaction Agent is running!"}
 
+# Sync docs from OCI bucket
 @app.get("/sync-bucket")
 def sync_bucket():
     try:
@@ -70,6 +80,7 @@ def sync_bucket():
         logger.error(f"Download error: {e}")
         raise HTTPException(500, str(e))
 
+# List supported docs from downloads (.docx/.pptx/.txt)
 @app.get("/load-docs")
 def load_docs():
     folder = get_docs_folder()
@@ -88,7 +99,7 @@ def load_docs():
     }
 
 
-
+# Extract supported docs to markdown
 @app.get("/extract-docs")
 def extract_docs():
     folder = get_docs_folder()
@@ -104,13 +115,19 @@ def extract_docs():
     result = {}
     for doc in docs:
         try:
+            file_base = os.path.basename(doc["file_path"])
+            stem, ext = os.path.splitext(file_base)
+            out_name = f"{stem}{ext.lower().replace('.', '_')}.md"
+            out_path = os.path.join(output_dir, out_name)
+            if os.path.exists(out_path):
+                result[os.path.basename(doc["file_path"])] = f"Skipped (already extracted): {out_path}"
+                continue
+
             text = extract_text_with_formatting_in_sequence(doc["file_path"])
         except Exception as e:
             text = f"Error extracting: {e}"
 
         result[os.path.basename(doc["file_path"])] = text
-        base_name = os.path.splitext(os.path.basename(doc["file_path"]))[0]
-        out_path = os.path.join(output_dir, f"{base_name}.md")
         try:
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(text)
@@ -120,11 +137,13 @@ def extract_docs():
     return result
 
 
+# Anonymize extracted markdown files
 @app.get("/anonymize-docs")
 def anonymize_docs():
     extracted_dir = get_extracted_folder()
     return anonymize_markdown_files(extracted_dir)
 
+# Chunk anonymized markdown content
 @app.get("/chunk-anonymized")
 def chunk_anonymized():
     base_dir = os.path.join(os.path.dirname(__file__),"app", "data")
@@ -136,6 +155,7 @@ def chunk_anonymized():
     return result
 
 
+# Embed chunks and persist embeddings JSON
 @app.post("/embed-chunks")
 def embed_chunks():
     chunks_path = os.path.join(
@@ -296,6 +316,7 @@ def embed_chunks():
     return summary
 
 
+# Store embeddings into vector DB
 @app.post("/store-embeddings")
 def store_embeddings_endpoint():
     json_file = os.path.join(
@@ -321,26 +342,87 @@ def store_embeddings_endpoint():
 
 class RAGRequest(BaseModel):
     query: str
-    top_k: Optional[int] = 5
-    session_id: Optional[str] = "default-session"
+    top_k: Optional[int] = Field(5, ge=1, le=20)
+    session_id: Optional[str] = None
 
+
+class CreateSessionRequest(BaseModel):
+    title: Optional[str] = None
+
+# Fetch chat history by session id
 @app.get("/session-history")
 def session_history_api(session_id: str):
-    from app.services.rag_service import session_history
-    return session_history.get(session_id, [])
+    return fetch_session_history(session_id)
 
+# List chat sessions for sidebar
+@app.get("/sessions")
+def list_sessions_api(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return list_sessions(limit=limit, offset=offset)
+
+# Get one chat session metadata
+@app.get("/sessions/{session_id}")
+def get_session_api(session_id: str):
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+# Delete chat session and its history
+@app.delete("/sessions/{session_id}")
+def delete_session_api(session_id: str):
+    result = delete_session(session_id)
+    if result["session_deleted"] == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "status": "ok",
+        "session_id": session_id,
+        "history_deleted": result["history_deleted"],
+        "session_deleted": result["session_deleted"],
+    }
+
+# Delete chat history by session id
+@app.delete("/session-history/{session_id}")
+def delete_session_history_api(session_id: str):
+    deleted = delete_session_history(session_id)
+    return {
+        "status": "ok",
+        "session_id": session_id,
+        "deleted_records": deleted
+    }
+
+# Create a new chat session (optional title)
+@app.post("/sessions")
+def create_session(payload: Optional[CreateSessionRequest] = None):
+    session_id = str(uuid.uuid4())
+    title = payload.title.strip() if payload and payload.title else None
+    ensure_session(session_id, title=title)
+    return {
+        "session_id": session_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+
+# Ask a question with auto-session creation
 @app.post("/ask")
 def ask_endpoint(payload: RAGRequest):
     """
     Multi-turn RAG Q&A endpoint.
     """
-    session_id = payload.session_id or "default-session"
-    logger.info(f"Session {payload.session_id}: Received query -> {payload.query}")
+    session_id = payload.session_id
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        ensure_session(session_id)
+    query = (payload.query or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    logger.info(f"Session {session_id}: Received query")
 
     try:
         response = answer_query(
-            query=payload.query,
-            top_k=payload.top_k,
+            query=query,
+            top_k=payload.top_k or 5,
             session_id=session_id
         )
 

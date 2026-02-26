@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging
 from oci.object_storage import ObjectStorageClient
 from oci.config import from_file
@@ -39,7 +39,7 @@ def download_all_from_bucket():
     logger.info(f"Found {len(objects)} objects in bucket")
 
     for obj in objects:
-        object_name = obj.name 
+        object_name = obj.name
 
         if object_name.endswith("/"):
             continue
@@ -48,7 +48,11 @@ def download_all_from_bucket():
 
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
-        logger.info(f"Downloading: {object_name} → {local_path}")
+        if os.path.exists(local_path):
+            logger.info(f"Skipping existing: {object_name}")
+            continue
+
+        logger.info(f"Downloading: {object_name} -> {local_path}")
 
         with open(local_path, "wb") as f:
             response = client.get_object(
@@ -60,3 +64,4 @@ def download_all_from_bucket():
 
     logger.info("Download completed.")
     return True
+
