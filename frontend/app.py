@@ -139,6 +139,19 @@ def fetch_history(session_id: str):
     return call_api("GET", "/session-history", params={"session_id": session_id})
 
 
+def fetch_chat_models():
+    result = call_api("GET", "/chat-models")
+    if result.get("ok"):
+        body = result.get("body", {}) or {}
+        models = body.get("models", []) or []
+        if models:
+            return models
+    return [
+        {"key": "cohere", "label": "Cohere (Default)", "is_default": True},
+        {"key": "maverick", "label": "Maverick", "is_default": False},
+    ]
+
+
 if "active_session_id" not in st.session_state:
     st.session_state["active_session_id"] = ""
 
@@ -153,6 +166,38 @@ if "edit_index" not in st.session_state:
 
 if "edit_text" not in st.session_state:
     st.session_state["edit_text"] = ""
+
+if "chat_models" not in st.session_state:
+    st.session_state["chat_models"] = fetch_chat_models()
+
+if "selected_model" not in st.session_state:
+    default_model = "cohere"
+    for _m in st.session_state["chat_models"]:
+        if _m.get("is_default"):
+            default_model = _m.get("key", "cohere")
+            break
+    st.session_state["selected_model"] = default_model
+
+if "response_meta" not in st.session_state:
+    st.session_state["response_meta"] = {}
+
+
+def _turn_key(session_id: str, idx: int, turn: dict) -> str:
+    role = turn.get("role", "")
+    content = (turn.get("content", "") or "")[:120]
+    return f"{session_id}:{idx}:{role}:{content}"
+
+
+def _attach_latest_assistant_meta(history: list, session_id: str, model_used: str, latency_s: float):
+    for idx in range(len(history) - 1, -1, -1):
+        turn = history[idx]
+        if turn.get("role") == "assistant":
+            key = _turn_key(session_id, idx, turn)
+            st.session_state["response_meta"][key] = {
+                "model_used": model_used or "unknown",
+                "latency_s": round(float(latency_s), 2),
+            }
+            break
 
 with st.sidebar:
     st.markdown(
@@ -176,6 +221,22 @@ with st.sidebar:
     with action_row[1]:
         if st.button("Refresh"):
             st.session_state["sessions_cache"] = fetch_sessions()
+            st.session_state["chat_models"] = fetch_chat_models()
+
+    model_options = st.session_state.get("chat_models", [])
+    option_keys = [m.get("key", "") for m in model_options if m.get("key")]
+    if not option_keys:
+        option_keys = ["cohere", "maverick"]
+    model_label_map = {m.get("key"): m.get("label", m.get("key")) for m in model_options}
+    if st.session_state.get("selected_model") not in option_keys:
+        st.session_state["selected_model"] = option_keys[0]
+    selected_model = st.selectbox(
+        "Model",
+        option_keys,
+        index=option_keys.index(st.session_state["selected_model"]),
+        format_func=lambda k: model_label_map.get(k, k),
+    )
+    st.session_state["selected_model"] = selected_model
 
     if not st.session_state["sessions_cache"]:
         st.session_state["sessions_cache"] = fetch_sessions()
@@ -237,6 +298,13 @@ if st.session_state["history_cache"]:
         content = turn.get("content", "")
         with st.chat_message(role):
             st.write(content)
+            if role == "assistant" and active_session_id:
+                key = _turn_key(active_session_id, idx, turn)
+                meta = st.session_state["response_meta"].get(key)
+                if meta:
+                    st.caption(
+                        f"Model: {meta.get('model_used', 'unknown')} | Time: {meta.get('latency_s', 0)}s"
+                    )
 
         if role == "user":
             edit_cols = st.columns([0.12, 0.88])
@@ -252,16 +320,29 @@ if st.session_state["history_cache"]:
                         if st.button("Save & Resend", key=f"save_edit_{idx}"):
                             edited_query = edited.strip()
                             if edited_query:
-                                payload = {"query": edited_query, "top_k": 5}
+                                payload = {
+                                    "query": edited_query,
+                                    "top_k": 5,
+                                    "model": st.session_state.get("selected_model", "cohere"),
+                                }
                                 if active_session_id:
                                     payload["session_id"] = active_session_id
+                                t0 = time.time()
                                 result = call_api("POST", "/ask", json_body=payload)
+                                elapsed = time.time() - t0
                                 if result.get("ok"):
                                     body = result.get("body", {})
                                     if body.get("session_id"):
                                         st.session_state["active_session_id"] = body["session_id"]
+                                    model_used = body.get("model_used", st.session_state.get("selected_model", "cohere"))
                                     hist = fetch_history(st.session_state["active_session_id"])
                                     st.session_state["history_cache"] = hist.get("body", []) if hist.get("ok") else []
+                                    _attach_latest_assistant_meta(
+                                        st.session_state["history_cache"],
+                                        st.session_state["active_session_id"],
+                                        model_used,
+                                        elapsed,
+                                    )
                                     st.session_state["sessions_cache"] = fetch_sessions()
                                     st.session_state["edit_index"] = None
                                     st.session_state["edit_text"] = ""
@@ -286,6 +367,7 @@ if query:
     payload = {
         "query": query,
         "top_k": 5,
+        "model": st.session_state.get("selected_model", "cohere"),
     }
     if active_session_id:
         payload["session_id"] = active_session_id
@@ -296,12 +378,15 @@ if query:
             "<div class='typing'><span></span><span></span><span></span></div>",
             unsafe_allow_html=True,
         )
+    t0 = time.time()
     result = call_api("POST", "/ask", json_body=payload)
+    elapsed = time.time() - t0
     if result.get("ok"):
         body = result.get("body", {})
         if body.get("session_id"):
             st.session_state["active_session_id"] = body["session_id"]
         answer = body.get("answer", "")
+        model_used = body.get("model_used", st.session_state.get("selected_model", "cohere"))
 
         with st.chat_message("assistant"):
             placeholder = st.empty()
@@ -313,9 +398,16 @@ if query:
                 rendered += ch
                 placeholder.markdown(rendered)
                 time.sleep(delay)
+            st.caption(f"Model: {model_used} | Time: {round(elapsed, 2)}s")
 
         hist = fetch_history(st.session_state["active_session_id"])
         st.session_state["history_cache"] = hist.get("body", []) if hist.get("ok") else []
+        _attach_latest_assistant_meta(
+            st.session_state["history_cache"],
+            st.session_state["active_session_id"],
+            model_used,
+            elapsed,
+        )
         st.session_state["sessions_cache"] = fetch_sessions()
         st.rerun()
     else:

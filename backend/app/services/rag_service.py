@@ -1,16 +1,13 @@
 from typing import Any, Dict, List
-from app.services.oci_llm import call_oci_chat, call_oci_title
+from app.services.oci_llm import call_oci_chat, call_oci_chat_maverick, call_oci_title
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.vector_store_service import search_similar_chunks
 from app.services.secure_config import get_env
-from app.services.session_store_service import (
-    fetch_session_history,
-    insert_session_message,
-    set_session_title_if_empty,
-)
 
 
 HISTORY_TURNS = int(get_env("HISTORY_TURNS", "20"))
+DEFAULT_CHAT_MODEL = "cohere"
+SUPPORTED_CHAT_MODELS = {"cohere", "maverick"}
 
 def _limit_title_words(title: str, max_words: int = 5) -> str:
     words = title.strip().split()
@@ -21,13 +18,39 @@ def _derive_session_title(query: str, max_words: int = 5) -> str:
     title = " ".join(query.strip().split())
     return _limit_title_words(title, max_words=max_words)
 
+
+def build_citations_from_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    citations: List[Dict[str, Any]] = []
+    for idx, hit in enumerate(hits, start=1):
+        metadata = (hit or {}).get("metadata", {}) or {}
+        citations.append(
+            {
+                "rank": idx,
+                "chunk_id": metadata.get("chunk_id") or f"chunk_{idx}",
+                "source_file": metadata.get("source_file"),
+                "chunk_index": metadata.get("chunk_index"),
+                "heading": metadata.get("heading"),
+            }
+        )
+    return citations
+
 # MAIN RAG + CONVERSATION FUNCTION
 
-def answer_query(query: str, top_k: int = 5, session_id: str | None = None) -> Dict[str, Any]:
-    if not session_id:
-        session_id = "default-session"
+def answer_query(
+    query: str,
+    top_k: int = 5,
+    history: List[Dict[str, str]] | None = None,
+    model: str = DEFAULT_CHAT_MODEL,
+    generate_title: bool = False,
+) -> Dict[str, Any]:
+    model_key = (model or DEFAULT_CHAT_MODEL).strip().lower()
+    if model_key not in SUPPORTED_CHAT_MODELS:
+        model_key = DEFAULT_CHAT_MODEL
 
-    history = fetch_session_history(session_id, limit=HISTORY_TURNS)
+    incoming_history = history or []
+    if HISTORY_TURNS > 0:
+        # Keep only the latest N turns to reduce context size.
+        incoming_history = incoming_history[-HISTORY_TURNS:]
 
     embedder = OCIEmbeddingService()
     query_embedding = embedder.embed_text(query)
@@ -44,40 +67,50 @@ def answer_query(query: str, top_k: int = 5, session_id: str | None = None) -> D
         })
 
     cohere_history = []
-    for turn in history:
-        if turn["role"] == "user":
+    for turn in incoming_history:
+        role = (turn or {}).get("role", "")
+        content = (turn or {}).get("content", "")
+        if not content:
+            continue
+        role_lower = role.lower()
+        if role_lower == "user":
             cohere_history.append({
                 "role": "USER",
-                "message": turn["content"]
+                "message": content
             })
-        elif turn["role"] == "assistant":
+        elif role_lower == "assistant":
             cohere_history.append({
                 "role": "CHATBOT",
-                "message": turn["content"]
+                "message": content
             })
 
-    # ---- Call OCI Cohere Chat ----
-    llm_output = call_oci_chat(
-        message=query,
-        chat_history=cohere_history,
-        documents=documents
-    )
+    # ---- Call selected chat model ----
+    if model_key == "maverick":
+        llm_output = call_oci_chat_maverick(
+            message=query,
+            chat_history=cohere_history,
+            documents=documents,
+        )
+    else:
+        llm_output = call_oci_chat(
+            message=query,
+            chat_history=cohere_history,
+            documents=documents,
+        )
 
-    # ---- Persist history ----
-    insert_session_message(session_id, "user", query)
-    insert_session_message(session_id, "assistant", llm_output)
-    if query:
+    generated_title = None
+    if generate_title and query:
         try:
-            title = call_oci_title(query, max_words=5)
+            generated_title = call_oci_title(query, max_words=5)
         except Exception:
-            title = _derive_session_title(query, max_words=5)
-        title = _limit_title_words(title, max_words=5)
-        if title:
-            set_session_title_if_empty(session_id, title)
+            generated_title = _derive_session_title(query, max_words=5)
+        generated_title = _limit_title_words(generated_title, max_words=5)
 
     return {
         "answer": llm_output,
         "chunks": hits,
-        "history_length": len(history) + 2,
-        "session_id": session_id
+        "citations": build_citations_from_hits(hits),
+        "history_length": len(incoming_history),
+        "model_used": model_key,
+        "generated_title": generated_title,
     }
