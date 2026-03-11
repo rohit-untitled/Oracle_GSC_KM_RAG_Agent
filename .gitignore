@@ -11,5 +11,6 @@ backend/app/__pycache__/
 backend/app/services/__pycache__/
 backend/app/data/
 backend/venv/
+frontend/
 backend/Wallet_POCSOLUTIONSATPDEV_Nov_2025
 test.py
