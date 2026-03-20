@@ -16,6 +16,9 @@ from oci.generative_ai_inference.models import (
 
 logger = logging.getLogger(__name__)
 
+EMBED_MODEL_ID = require_env("EMBED_MODEL_ID")
+EXPECTED_VECTOR_DIM = int(get_env("VECTOR_DIM", "1536"))
+
 
 class OCIEmbeddingService:
 
@@ -36,7 +39,7 @@ class OCIEmbeddingService:
         )
 
         self.serving_mode = OnDemandServingMode(
-            model_id="cohere.embed-multilingual-image-v3.0"
+            model_id=EMBED_MODEL_ID
         )
 
         self.compartment_id = (
@@ -123,7 +126,9 @@ class OCIEmbeddingService:
                 compartment_id=self.compartment_id,
             )
             resp = self._embed_call_with_retry(req)
-            return resp.data.embeddings[0], depth
+            embedding = resp.data.embeddings[0]
+            self._validate_embedding_dimensions(embedding)
+            return embedding, depth
 
         except Exception as e:
             msg = str(e)
@@ -166,7 +171,17 @@ class OCIEmbeddingService:
             compartment_id=self.compartment_id,
         )
         resp = self._embed_call_with_retry(req)
-        return resp.data.embeddings
+        embeddings = resp.data.embeddings
+        for embedding in embeddings:
+            self._validate_embedding_dimensions(embedding)
+        return embeddings
+
+    def _validate_embedding_dimensions(self, embedding: List[float]) -> None:
+        if embedding and len(embedding) != EXPECTED_VECTOR_DIM:
+            raise ValueError(
+                f"Embedding dimension mismatch: expected {EXPECTED_VECTOR_DIM}, got {len(embedding)}. "
+                f"Check EMBED_MODEL_ID and VECTOR_DIM configuration."
+            )
 
     def _embed_call_with_retry(self, req: EmbedTextDetails, max_retries: int = 8):
         last_err = None

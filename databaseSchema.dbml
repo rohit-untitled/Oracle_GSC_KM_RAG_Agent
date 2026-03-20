@@ -1,0 +1,278 @@
+Enum km_batch_status {
+  PENDING
+  IN_PROGRESS
+  PARTIAL_SUCCESS
+  COMPLETED
+  FAILED
+}
+
+Enum km_run_type {
+  AUTO
+  MANUAL_RETRY
+  SCHEDULED
+}
+
+Enum km_run_status {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  PARTIAL_SUCCESS
+}
+
+Enum km_step_status {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+Enum km_document_status {
+  STAGED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  SUPERSEDED
+}
+
+Enum km_yes_no_flag {
+  Y
+  N
+}
+
+Enum km_chunk_status {
+  ACTIVE
+  SUPERSEDED
+  FAILED
+}
+
+Enum km_rag_compliant_flag {
+  Y
+  N
+}
+
+// --- Project & Ingestion Management ---
+
+Table XXGSC_KM_PROJECTS {
+  PROJECT_ID varchar2(50) [pk, note: 'Default: RAWTOHEX(SYS_GUID())']
+  PROJECT_NAME varchar2(255) [unique, not null]
+  GEOGRAPHY_CODE varchar2(50)
+  VERTICAL_CODE varchar2(50)
+  ENGAGEMENT_TYPE varchar2(500)
+  CONFIDENTIALITY varchar2(50)
+  CREATED_BY varchar2(100) [default: 'USER']
+  CREATED_DATE timestamp(6) [default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(100) [default: 'USER']
+  LAST_UPDATED_DATE timestamp(6) [default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores the master project or engagement context for knowledge documents.
+    This table holds project-level metadata such as geography, vertical, engagement type, and confidentiality.
+    Multiple documents can belong to one project, and project attributes are inherited logically during retrieval and reporting.
+  '''
+}
+
+Table XXGSC_KM_INGESTION_BATCH {
+  BATCH_ID varchar2(50) [pk, note: 'Default: SYS_GUID()']
+  SOURCE_SYSTEM varchar2(50) [not null]
+  REQUESTED_BY varchar2(255) [not null]
+  REQUESTED_AT timestamp(6) [not null]
+  STATUS km_batch_status [not null, default: 'PENDING']
+  TOTAL_DOCUMENTS number [not null, default: 0]
+  SUCCESSFUL_DOCUMENTS number [not null, default: 0]
+  FAILED_DOCUMENTS number [not null, default: 0]
+  OBJECT_BUCKET varchar2(255)
+  OBJECT_NAMESPACE varchar2(255)
+  ERROR_MESSAGE clob
+  CREATED_BY varchar2(255) [not null]
+  CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(255) [not null]
+  LAST_UPDATE_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores one ingestion request or upload event.
+    A batch may represent either a single uploaded document or a bulk upload containing many documents.
+    It is used to track overall ingestion progress, counts of processed documents, and batch-level failures.
+  '''
+}
+
+// --- Document & Versioning ---
+
+Table XXGSC_KM_DOCUMENTS {
+  DOCUMENT_ID varchar2(50) [pk, note: 'Default: RAWTOHEX(SYS_GUID())']
+  PROJECT_ID varchar2(50) [not null, ref: > XXGSC_KM_PROJECTS.PROJECT_ID]
+  FILE_NAME varchar2(500) [not null]
+  DOC_TYPE_CODE varchar2(50)
+  MODULE_CODE varchar2(50)
+  DOC_VERSION varchar2(20) [default: '1.0']
+  STATUS km_document_status [default: 'STAGED']
+  RAG_COMPLIANT_FLAG km_rag_compliant_flag [default: 'N']
+  OCI_OBJECT_PATH varchar2(2000)
+  MIME_TYPE varchar2(255)
+  CREATED_BY varchar2(100) [default: 'USER']
+  CREATED_DATE timestamp(6) [default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(100) [default: 'USER']
+  LAST_UPDATED_DATE timestamp(6) [default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+  ORIGINAL_FILE_NAME varchar2(500)
+  OBJECT_NAME varchar2(1000)
+  BUCKET_NAME varchar2(255)
+  NAMESPACE_NAME varchar2(255)
+  OBJECT_URI varchar2(2000)
+  INGESTION_BATCH_ID varchar2(50) [ref: > XXGSC_KM_INGESTION_BATCH.BATCH_ID]
+
+  Note: '''
+    Stores the master record for each uploaded knowledge document.
+    This table links a document to its project, ingestion batch, storage location, functional classification, and lifecycle status.
+    Document-level metadata in the current design is intentionally limited to DOC_TYPE_CODE and MODULE_CODE.
+  '''
+}
+
+Table XXGSC_KM_DOCUMENT_VERSION {
+  DOCUMENT_VERSION_ID varchar2(50) [pk, note: 'Default: RAWTOHEX(SYS_GUID())']
+  DOCUMENT_ID varchar2(50) [not null, ref: > XXGSC_KM_DOCUMENTS.DOCUMENT_ID]
+  VERSION_NO number [not null]
+  OBJECT_NAME varchar2(1000) [not null]
+  IS_CURRENT km_yes_no_flag [not null, default: 'Y']
+  VALID_FROM timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  VALID_TO timestamp(6)
+  CREATED_BY varchar2(255) [not null]
+  CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(255) [not null]
+  LAST_UPDATE_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores version history for a document.
+    This table supports document replacement, correction, and controlled re-upload scenarios by preserving prior file versions.
+    One logical document can therefore have multiple physical uploaded versions over time.
+  '''
+}
+
+// --- Execution & Logging ---
+
+Table XXGSC_KM_INGESTION_RUN {
+  RUN_ID varchar2(50) [pk, note: 'Default: RAWTOHEX(SYS_GUID())']
+  BATCH_ID varchar2(50) [not null, ref: > XXGSC_KM_INGESTION_BATCH.BATCH_ID]
+  RUN_TYPE km_run_type [not null, default: 'AUTO']
+  STATUS km_run_status [not null, default: 'PENDING']
+  TRIGGERED_BY varchar2(255) [not null]
+  STARTED_AT timestamp(6) [not null]
+  ENDED_AT timestamp(6)
+  TOTAL_DOCUMENTS number [not null, default: 0]
+  SUCCESSFUL_DOCUMENTS number [not null, default: 0]
+  FAILED_DOCUMENTS number [not null, default: 0]
+  CREATED_BY varchar2(255) [not null]
+  CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(255) [not null]
+  LAST_UPDATE_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores one execution attempt of the ingestion pipeline.
+    A single batch may be processed more than once, for example during retries or scheduled reprocessing.
+    This table is essential for operational monitoring, troubleshooting, and auditability.
+  '''
+}
+
+Table XXGSC_KM_INGESTION_STEP_LOG {
+  LOG_ID varchar2(50) [pk, note: 'Default: RAWTOHEX(SYS_GUID())']
+  RUN_ID varchar2(50) [not null, ref: > XXGSC_KM_INGESTION_RUN.RUN_ID]
+  BATCH_ID varchar2(50) [not null, ref: > XXGSC_KM_INGESTION_BATCH.BATCH_ID]
+  DOCUMENT_ID varchar2(50) [not null, ref: > XXGSC_KM_DOCUMENTS.DOCUMENT_ID]
+  STEP_NAME varchar2(100) [not null]
+  STEP_STATUS km_step_status [not null]
+  STEP_SEQUENCE number [not null]
+  MESSAGE clob
+  STARTED_AT timestamp(6) [not null]
+  ENDED_AT timestamp(6)
+  DURATION_MS number
+  CREATED_BY varchar2(255) [not null]
+  CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(255) [not null]
+  LAST_UPDATE_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores detailed step-level execution logs for each document processed during an ingestion run.
+    Typical steps include download, extraction, anonymization, chunking, embedding, and vector storage.
+    This table helps operations teams identify exactly where and why a document failed during processing.
+  '''
+}
+
+// --- RAG Specific: Chunks & Vectors ---
+
+Table XXGSC_KM_DOCUMENT_CHUNK {
+  CHUNK_ID varchar2(100) [pk]
+  DOCUMENT_ID varchar2(50) [not null, ref: > XXGSC_KM_DOCUMENTS.DOCUMENT_ID]
+  RUN_ID varchar2(50) [not null, ref: > XXGSC_KM_INGESTION_RUN.RUN_ID]
+  CHUNK_INDEX number [not null]
+  SECTION_HEADING varchar2(500)
+  CHUNK_TEXT clob [not null]
+  CHUNK_HASH varchar2(500) [not null]
+  IS_ANONYMIZED km_yes_no_flag [not null, default: 'N']
+  CHUNK_STATUS km_chunk_status [not null, default: 'ACTIVE']
+  CREATED_BY varchar2(255) [not null]
+  CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(255) [not null]
+  LAST_UPDATE_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores the chunked textual representation of a document generated during ingestion.
+    Each chunk belongs to one document and one ingestion run, and acts as the content unit used for embedding and retrieval.
+    This table is the bridge between document metadata and semantic vector search results.
+  '''
+}
+
+Table XXGSC_KM_CHUNK_VECTOR {
+  VECTOR_ID varchar2(100) [pk, note: 'Default: RAWTOHEX(SYS_GUID())']
+  CHUNK_ID varchar2(100) [not null, unique, ref: - XXGSC_KM_DOCUMENT_CHUNK.CHUNK_ID]
+  DOCUMENT_ID varchar2(50) [not null, ref: > XXGSC_KM_DOCUMENTS.DOCUMENT_ID]
+  RUN_ID varchar2(50) [not null, ref: > XXGSC_KM_INGESTION_RUN.RUN_ID]
+  EMBEDDING_VECTOR vector(1536) [not null]
+  CREATED_BY varchar2(255) [not null]
+  CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(255) [not null]
+  LAST_UPDATE_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores the vector embedding generated for a document chunk.
+    This table is used for semantic similarity search during RAG retrieval.
+    The vector row links back to the chunk and document so that results can be enriched with source metadata and citations.
+  '''
+}

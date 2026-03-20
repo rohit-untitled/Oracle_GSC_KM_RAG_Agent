@@ -1,8 +1,10 @@
-import os
 import json
+import os
 import re
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
 import nltk
-from typing import List, Dict, Optional, Tuple
 
 try:
     nltk.data.find("tokenizers/punkt")
@@ -260,11 +262,14 @@ def chunk_anonymized_documents(base_dir: str, max_tokens: int = 350, overlap_tok
         blocks = _merge_consecutive_tables(blocks)
         chunks = _chunk_blocks(blocks, max_tokens=max_tokens, overlap_tokens=overlap_tokens)
 
-        base_name, _ = os.path.splitext(filename)
-        source_docx = base_name + ".docx"
+        source_name = Path(filename).stem
+        if source_name.endswith(("_docx", "_pptx", "_pdf", "_txt")):
+            source_file = f"{source_name.rsplit('_', 1)[0]}.{source_name.rsplit('_', 1)[1]}"
+        else:
+            source_file = source_name
         for i, ch in enumerate(chunks):
             all_chunks.append({
-                "source_file": source_docx,
+                "source_file": source_file,
                 "source_md": filename,
                 "chunk_index": i,
                 "heading": ch["heading"],

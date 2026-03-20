@@ -1,0 +1,258 @@
+{
+  "version": "1.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "detailLevel": "All",
+  "tablePositions": [
+    {
+      "name": "XXGSC_KM_PROJECTS",
+      "schemaName": "public",
+      "x": -604.5350552911987,
+      "y": 146.88622158558627
+    },
+    {
+      "name": "XXGSC_KM_INGESTION_BATCH",
+      "schemaName": "public",
+      "x": -131.17868614638138,
+      "y": 883.5903795585991
+    },
+    {
+      "name": "XXGSC_KM_DOCUMENTS",
+      "schemaName": "public",
+      "x": 710.1805318982148,
+      "y": 113.20215893641586
+    },
+    {
+      "name": "XXGSC_KM_DOCUMENT_VERSION",
+      "schemaName": "public",
+      "x": 1613.8445783180532,
+      "y": 82.00388797650442
+    },
+    {
+      "name": "XXGSC_KM_INGESTION_RUN",
+      "schemaName": "public",
+      "x": -638.175508705318,
+      "y": 791.5320693189577
+    },
+    {
+      "name": "XXGSC_KM_INGESTION_STEP_LOG",
+      "schemaName": "public",
+      "x": -593.3601375774151,
+      "y": 1507.1997712929378
+    },
+    {
+      "name": "XXGSC_KM_DOCUMENT_CHUNK",
+      "schemaName": "public",
+      "x": 731.1394775543883,
+      "y": 1148.5959945992881
+    },
+    {
+      "name": "XXGSC_KM_CHUNK_VECTOR",
+      "schemaName": "public",
+      "x": 1617.8044760934065,
+      "y": 899.2007174573073
+    }
+  ],
+  "tableGroupCollapseStates": [],
+  "stickyNoteLayouts": [],
+  "referencePaths": [
+    {
+      "firstFieldNames": [
+        "PROJECT_ID"
+      ],
+      "firstTableName": "XXGSC_KM_PROJECTS",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "PROJECT_ID"
+      ],
+      "secondTableName": "XXGSC_KM_DOCUMENTS",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "BATCH_ID"
+      ],
+      "firstTableName": "XXGSC_KM_INGESTION_BATCH",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "INGESTION_BATCH_ID"
+      ],
+      "secondTableName": "XXGSC_KM_DOCUMENTS",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "firstTableName": "XXGSC_KM_DOCUMENTS",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "secondTableName": "XXGSC_KM_DOCUMENT_VERSION",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "BATCH_ID"
+      ],
+      "firstTableName": "XXGSC_KM_INGESTION_BATCH",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "BATCH_ID"
+      ],
+      "secondTableName": "XXGSC_KM_INGESTION_RUN",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "RUN_ID"
+      ],
+      "firstTableName": "XXGSC_KM_INGESTION_RUN",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "RUN_ID"
+      ],
+      "secondTableName": "XXGSC_KM_INGESTION_STEP_LOG",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "BATCH_ID"
+      ],
+      "firstTableName": "XXGSC_KM_INGESTION_BATCH",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "BATCH_ID"
+      ],
+      "secondTableName": "XXGSC_KM_INGESTION_STEP_LOG",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "firstTableName": "XXGSC_KM_DOCUMENTS",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "secondTableName": "XXGSC_KM_INGESTION_STEP_LOG",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": [
+        {
+          "x": 354.10761425865235,
+          "y": 161.20215893641586
+        },
+        {
+          "x": 354.10761425865235,
+          "y": 1651.1997712929378
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "firstTableName": "XXGSC_KM_DOCUMENTS",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "secondTableName": "XXGSC_KM_DOCUMENT_CHUNK",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": [
+        {
+          "x": 1228.4664495549514,
+          "y": 161.20215893641586
+        },
+        {
+          "x": 1228.4664495549514,
+          "y": 1228.5959945992881
+        }
+      ]
+    },
+    {
+      "firstFieldNames": [
+        "RUN_ID"
+      ],
+      "firstTableName": "XXGSC_KM_INGESTION_RUN",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "RUN_ID"
+      ],
+      "secondTableName": "XXGSC_KM_DOCUMENT_CHUNK",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "CHUNK_ID"
+      ],
+      "firstTableName": "XXGSC_KM_DOCUMENT_CHUNK",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "CHUNK_ID"
+      ],
+      "secondTableName": "XXGSC_KM_CHUNK_VECTOR",
+      "secondSchemaName": "public",
+      "secondRelation": "1",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "firstTableName": "XXGSC_KM_DOCUMENTS",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "DOCUMENT_ID"
+      ],
+      "secondTableName": "XXGSC_KM_CHUNK_VECTOR",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    },
+    {
+      "firstFieldNames": [
+        "RUN_ID"
+      ],
+      "firstTableName": "XXGSC_KM_INGESTION_RUN",
+      "firstSchemaName": "public",
+      "firstRelation": "1",
+      "secondFieldNames": [
+        "RUN_ID"
+      ],
+      "secondTableName": "XXGSC_KM_CHUNK_VECTOR",
+      "secondSchemaName": "public",
+      "secondRelation": "*",
+      "checkPoints": []
+    }
+  ]
+}
