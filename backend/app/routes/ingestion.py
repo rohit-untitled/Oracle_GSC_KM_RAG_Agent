@@ -1,7 +1,6 @@
 import hashlib
 import logging
 import mimetypes
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,17 +14,15 @@ from app.services.document_loader import load_docx_files
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.ingestion_db_service import (
     compute_sha256_text,
-    compute_object_uri,
     create_document_version,
-    create_document_record,
-    create_ingestion_batch,
     create_ingestion_run,
     delete_document_completely,
     finalize_ingestion_batch,
     finalize_ingestion_run,
     find_current_document_version,
     get_batch_status,
-    get_or_create_project,
+    get_documents_for_batch,
+    get_documents_for_batch_by_ids,
     list_documents_by_batch,
     list_document_steps,
     make_deterministic_chunk_id,
@@ -34,7 +31,7 @@ from app.services.ingestion_db_service import (
     finish_step_log,
     supersede_document,
 )
-from app.services.oci_downloader import download_all_from_bucket
+from app.services.oci_downloader import download_all_from_bucket, download_object
 from app.services.secure_config import get_env
 from app.services.vector_store_service import insert_document_embeddings
 from app.services.vector_store_service import get_connection, close_connection
@@ -49,32 +46,16 @@ DEFAULT_CHUNK_MAX_TOKENS = 300
 DEFAULT_CHUNK_OVERLAP_TOKENS = 40
 
 
-class ProjectPayload(BaseModel):
-    project_name: str
-    geography_code: Optional[str] = None
-    vertical_code: Optional[str] = None
-    engagement_type: Optional[str] = None
-    confidentiality: Optional[str] = None
-
-
-class DocumentPayload(BaseModel):
-    file_name: str
-    file_path: Optional[str] = None
-    object_name: Optional[str] = None
-    bucket_name: Optional[str] = None
-    namespace_name: Optional[str] = None
-    module_code: Optional[str] = None
-    doc_type_code: Optional[str] = None
-    mime_type: Optional[str] = None
-    content_text: Optional[str] = None
+class SelectedDocumentPayload(BaseModel):
+    document_id: str
 
 
 class IngestionApiRequest(BaseModel):
+    batch_id: str = Field(..., description="Existing batch identifier created by APEX")
     requested_by: str = Field(..., description="User or system triggering ingestion")
     source_system: str = Field(default="APEX", description="Source system name")
     anonymize_docs: bool = True
-    project: ProjectPayload
-    documents: List[DocumentPayload]
+    documents: List[SelectedDocumentPayload] = Field(default_factory=list)
 
 
 def _backend_root() -> Path:
@@ -85,32 +66,12 @@ def get_docs_folder() -> str:
     return str(_backend_root() / "app" / "data" / "downloads")
 
 
-def _extract_document_text(doc: DocumentPayload) -> str:
-    if doc.content_text and doc.content_text.strip():
-        return doc.content_text.strip()
-
-    source_path = doc.file_path
-    if not source_path and doc.object_name:
-        source_path = str(Path(get_docs_folder()) / doc.object_name)
-
-    if not source_path:
-        raise ValueError(f"No content_text or file_path/object_name provided for {doc.file_name}")
-
-    return extract_text_with_formatting_in_sequence(source_path)
+def _extract_document_text(local_path: str) -> str:
+    return extract_text_with_formatting_in_sequence(local_path)
 
 
-def _compute_file_hash(doc: DocumentPayload) -> str:
-    if doc.content_text and doc.content_text.strip():
-        return hashlib.sha256(doc.content_text.encode("utf-8")).hexdigest()
-
-    source_path = doc.file_path
-    if not source_path and doc.object_name:
-        source_path = str(Path(get_docs_folder()) / doc.object_name)
-
-    if not source_path:
-        raise ValueError(f"No file_path/object_name provided to compute file hash for {doc.file_name}")
-
-    with open(source_path, "rb") as f:
+def _compute_file_hash(local_path: str) -> str:
+    with open(local_path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
 
@@ -157,7 +118,7 @@ def _embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _process_document(
-    doc: DocumentPayload,
+    doc: Dict[str, Any],
     *,
     batch_id: str,
     run_id: str,
@@ -167,49 +128,37 @@ def _process_document(
     chunk_max_tokens: int,
     chunk_overlap_tokens: int,
 ) -> Dict[str, Any]:
-    object_name = doc.object_name or doc.file_name
-    bucket_name = doc.bucket_name or DEFAULT_BUCKET
-    namespace_name = doc.namespace_name or DEFAULT_NAMESPACE
-    object_uri = compute_object_uri(namespace_name, bucket_name, object_name)
-    mime_type = doc.mime_type or mimetypes.guess_type(doc.file_name)[0]
+    document_id = doc.get("document_id")
+    file_name = doc.get("file_name")
+    object_name = doc.get("object_name") or file_name
+    bucket_name = doc.get("bucket_name") or DEFAULT_BUCKET
+    namespace_name = doc.get("namespace_name") or DEFAULT_NAMESPACE
+    local_path = download_object(object_name, bucket_name=bucket_name, namespace_name=namespace_name)
+    mime_type = doc.get("mime_type") or mimetypes.guess_type(file_name)[0]
 
-    file_hash = _compute_file_hash(doc)
-    extracted_text = _extract_document_text(doc)
+    file_hash = _compute_file_hash(local_path)
+    extracted_text = _extract_document_text(local_path)
     content_hash = compute_sha256_text(extracted_text)
 
-    existing = find_current_document_version(project_id, object_name, doc.file_name)
-    if existing and existing.get("file_hash") == file_hash and existing.get("content_hash") == content_hash:
-        return {
-            "document_id": existing["document_id"],
-            "file_name": doc.file_name,
-            "status": "SKIPPED_DUPLICATE",
-            "message": "Duplicate document detected by file/content hash",
-        }
+    existing = find_current_document_version(project_id, object_name, file_name)
+    if existing and existing.get("document_id") != document_id:
+        if existing.get("file_hash") == file_hash and existing.get("content_hash") == content_hash:
+            return {
+                "document_id": document_id,
+                "file_name": file_name,
+                "status": "SKIPPED_DUPLICATE",
+                "message": "Duplicate document detected by file/content hash",
+            }
 
-    if existing:
         supersede_document(existing["document_id"], requested_by)
         next_version = int(existing.get("version_no") or 1) + 1
     else:
         next_version = 1
 
-    document_id = create_document_record(
-        project_id=project_id,
-        batch_id=batch_id,
-        file_name=doc.file_name,
-        requested_by=requested_by,
-        object_name=object_name,
-        bucket_name=bucket_name,
-        namespace_name=namespace_name,
-        object_uri=object_uri,
-        module_code=doc.module_code,
-        doc_type_code=doc.doc_type_code,
-        mime_type=mime_type,
-        file_hash=file_hash,
-        content_hash=content_hash,
-    )
     create_document_version(document_id, object_name, requested_by, next_version)
 
     try:
+        mark_document_status(document_id, "IN_PROGRESS", requested_by)
         extracted_text = _run_logged_step(
             run_id=run_id,
             batch_id=batch_id,
@@ -246,7 +195,7 @@ def _process_document(
                     "chunk_id": make_deterministic_chunk_id(document_id, idx, chunk_text),
                     "chunk_index": idx,
                     "heading": chunk.get("heading"),
-                    "source_file": doc.file_name,
+                    "source_file": file_name,
                     "chunk": chunk_text,
                 }
             )
@@ -278,7 +227,7 @@ def _process_document(
         mark_document_status(document_id, "COMPLETED", requested_by)
         return {
             "document_id": document_id,
-            "file_name": doc.file_name,
+            "file_name": file_name,
             "status": "COMPLETED",
             "chunks_created": len(prepared_chunks),
             "vectors_stored": stored_chunks,
@@ -287,7 +236,7 @@ def _process_document(
         mark_document_status(document_id, "FAILED", requested_by)
         return {
             "document_id": document_id,
-            "file_name": doc.file_name,
+            "file_name": file_name,
             "status": "FAILED",
             "error": str(exc),
         }
@@ -389,22 +338,22 @@ def get_document_steps(document_id: str):
     }
 
 
-def _process_batch_documents(
-    payload: IngestionApiRequest,
-    project_id: str,
-    project_name: str,
-    batch_id: str,
-    run_id: str,
-) -> None:
+def _process_batch_documents(payload: IngestionApiRequest, batch_id: str, run_id: str) -> None:
     successful_documents = 0
     failed_documents = 0
 
-    for doc in payload.documents:
+    selected_document_ids = [doc.document_id for doc in payload.documents]
+    if selected_document_ids:
+        documents = get_documents_for_batch_by_ids(batch_id, selected_document_ids)
+    else:
+        documents = get_documents_for_batch(batch_id)
+
+    for doc in documents:
         result = _process_document(
             doc,
             batch_id=batch_id,
             run_id=run_id,
-            project_id=project_id,
+            project_id=doc.get("project_id"),
             requested_by=payload.requested_by,
             anonymize_docs=payload.anonymize_docs,
             chunk_max_tokens=DEFAULT_CHUNK_MAX_TOKENS,
@@ -419,33 +368,42 @@ def _process_batch_documents(
     finalize_ingestion_batch(batch_id, successful_documents, failed_documents, payload.requested_by)
 
 
-@router.post("/ingest")
+@router.post("/ingestion/start")
 def run_ingestion(payload: IngestionApiRequest, background_tasks: BackgroundTasks):
-    if not payload.documents:
-        raise HTTPException(status_code=400, detail="At least one document is required.")
-
     try:
-        project = get_or_create_project(payload.project.model_dump(), payload.requested_by)
+        batch = get_batch_status(payload.batch_id)
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found.")
 
-        batch_id = create_ingestion_batch(payload.source_system, payload.requested_by, len(payload.documents))
-        run_id = create_ingestion_run(batch_id, payload.requested_by, len(payload.documents))
+        selected_document_ids = [doc.document_id for doc in payload.documents]
+        if selected_document_ids:
+            documents = get_documents_for_batch_by_ids(payload.batch_id, selected_document_ids)
+            if len(documents) != len(set(selected_document_ids)):
+                raise HTTPException(status_code=400, detail="One or more requested documents are invalid for the batch.")
+        else:
+            documents = get_documents_for_batch(payload.batch_id)
+
+        if not documents:
+            raise HTTPException(status_code=400, detail="No documents found for the batch.")
+
+        run_id = create_ingestion_run(payload.batch_id, payload.requested_by, len(documents))
 
         background_tasks.add_task(
             _process_batch_documents,
             payload,
-            project["project_id"],
-            project["project_name"],
-            batch_id,
+            payload.batch_id,
             run_id,
         )
 
         return {
             "status": "accepted",
-            "message": "Batch accepted for background ingestion",
-            "project_id": project["project_id"],
-            "project_name": project["project_name"],
-            "batch_id": batch_id,
+            "message": "Ingestion request accepted. Processing started.",
+            "batch_id": payload.batch_id,
             "run_id": run_id,
+            "requested_by": payload.requested_by,
+            "source_system": payload.source_system,
+            "anonymize_docs": payload.anonymize_docs,
+            "selected_documents": len(documents),
         }
     except Exception as exc:
         logger.exception("Ingestion pipeline failed")

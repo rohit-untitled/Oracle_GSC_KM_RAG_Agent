@@ -548,6 +548,105 @@ def get_batch_status(batch_id: str) -> Optional[Dict[str, Any]]:
         _release(conn)
 
 
+def get_documents_for_batch(batch_id: str) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"""
+            SELECT
+                DOCUMENT_ID,
+                PROJECT_ID,
+                FILE_NAME,
+                STATUS,
+                DOC_TYPE_CODE,
+                MODULE_CODE,
+                MIME_TYPE,
+                OBJECT_NAME,
+                BUCKET_NAME,
+                NAMESPACE_NAME
+            FROM {TABLE_DOCUMENTS}
+            WHERE INGESTION_BATCH_ID = :batch_id
+            ORDER BY CREATED_DATE DESC
+            """,
+            {"batch_id": batch_id},
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "document_id": row[0],
+                "project_id": row[1],
+                "file_name": row[2],
+                "status": row[3],
+                "doc_type_code": row[4],
+                "module_code": row[5],
+                "mime_type": row[6],
+                "object_name": row[7],
+                "bucket_name": row[8],
+                "namespace_name": row[9],
+            }
+            for row in rows
+        ]
+    finally:
+        cur.close()
+        _release(conn)
+
+
+def get_documents_for_batch_by_ids(batch_id: str, document_ids: list[str]) -> list[Dict[str, Any]]:
+    if not document_ids:
+        return []
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        bind_names = []
+        binds: Dict[str, Any] = {"batch_id": batch_id}
+        for idx, document_id in enumerate(document_ids):
+            key = f"doc_id_{idx}"
+            bind_names.append(f":{key}")
+            binds[key] = document_id
+
+        cur.execute(
+            f"""
+            SELECT
+                DOCUMENT_ID,
+                PROJECT_ID,
+                FILE_NAME,
+                STATUS,
+                DOC_TYPE_CODE,
+                MODULE_CODE,
+                MIME_TYPE,
+                OBJECT_NAME,
+                BUCKET_NAME,
+                NAMESPACE_NAME
+            FROM {TABLE_DOCUMENTS}
+            WHERE INGESTION_BATCH_ID = :batch_id
+              AND DOCUMENT_ID IN ({', '.join(bind_names)})
+            ORDER BY CREATED_DATE DESC
+            """,
+            binds,
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "document_id": row[0],
+                "project_id": row[1],
+                "file_name": row[2],
+                "status": row[3],
+                "doc_type_code": row[4],
+                "module_code": row[5],
+                "mime_type": row[6],
+                "object_name": row[7],
+                "bucket_name": row[8],
+                "namespace_name": row[9],
+            }
+            for row in rows
+        ]
+    finally:
+        cur.close()
+        _release(conn)
+
+
 def list_documents_by_batch(batch_id: str) -> list[Dict[str, Any]]:
     conn = get_connection()
     cur = conn.cursor()

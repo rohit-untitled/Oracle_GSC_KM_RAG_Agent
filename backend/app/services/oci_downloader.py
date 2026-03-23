@@ -18,6 +18,32 @@ NAMESPACE = require_env("OCI_NAMESPACE")
 
 DOWNLOAD_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "downloads")
 
+
+def download_object(object_name: str, bucket_name: str | None = None, namespace_name: str | None = None) -> str:
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    config = from_file(CONFIG_PATH, PROFILE)
+    client = ObjectStorageClient(config)
+
+    resolved_bucket = bucket_name or BUCKET_NAME
+    resolved_namespace = namespace_name or NAMESPACE
+    local_path = os.path.join(DOWNLOAD_ROOT, object_name)
+
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+    logger.info("Downloading object: %s -> %s", object_name, local_path)
+    response = client.get_object(
+        namespace_name=resolved_namespace,
+        bucket_name=resolved_bucket,
+        object_name=object_name,
+    )
+
+    with open(local_path, "wb") as f:
+        f.write(response.data.content)
+
+    return local_path
+
 def download_all_from_bucket():
     """
     Downloads ALL folders/files recursively from an OCI bucket.
@@ -64,4 +90,5 @@ def download_all_from_bucket():
 
     logger.info("Download completed.")
     return True
+
 
