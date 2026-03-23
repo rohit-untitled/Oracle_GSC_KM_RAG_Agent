@@ -1,13 +1,13 @@
 from typing import Any, Dict, List
-from app.services.oci_llm import call_oci_chat, call_oci_chat_maverick, call_oci_title
+from app.services.oci_llm import call_oci_chat, call_oci_chat_generic, call_oci_chat_maverick, call_oci_title
 from app.services.embedding_service import OCIEmbeddingService
-from app.services.vector_store_service import search_similar_chunks
+from app.services.retrieval_service import search_similar_chunks
 from app.services.secure_config import get_env
 
 
 HISTORY_TURNS = int(get_env("HISTORY_TURNS", "20"))
 DEFAULT_CHAT_MODEL = "cohere"
-SUPPORTED_CHAT_MODELS = {"cohere", "maverick"}
+SUPPORTED_CHAT_MODELS = {"cohere", "maverick", "gpt-5.2"}
 
 def _limit_title_words(title: str, max_words: int = 5) -> str:
     words = title.strip().split()
@@ -54,6 +54,8 @@ def answer_query(
 
     embedder = OCIEmbeddingService()
     query_embedding = embedder.embed_text(query)
+    if not query_embedding:
+        raise ValueError("Failed to generate embedding for the query.")
 
     hits = search_similar_chunks(query_embedding, top_k=top_k)
 
@@ -84,9 +86,21 @@ def answer_query(
                 "message": content
             })
 
+    if not documents:
+        documents = [{
+            "title": "No matching knowledge found",
+            "snippet": "No relevant knowledge base chunks were found for this query. Respond carefully and mention that no strong source context was retrieved.",
+        }]
+
     # ---- Call selected chat model ----
     if model_key == "maverick":
         llm_output = call_oci_chat_maverick(
+            message=query,
+            chat_history=cohere_history,
+            documents=documents,
+        )
+    elif model_key == "gpt-5.2":
+        llm_output = call_oci_chat_generic(
             message=query,
             chat_history=cohere_history,
             documents=documents,

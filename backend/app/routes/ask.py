@@ -12,7 +12,7 @@ from app.services.secure_config import get_env
 router = APIRouter()
 logger = logging.getLogger("KM Knowledge Agent is Working")
 
-ASK_MAX_TURNS = int(get_env("ASK_MAX_TURNS", "20"))
+ASK_MAX_TURNS = int(get_env("ASK_MAX_TURNS", "15"))
 ASK_MAX_INPUT_TOKENS = int(get_env("ASK_MAX_INPUT_TOKENS", "4000"))
 
 
@@ -27,11 +27,11 @@ class RAGRequest(BaseModel):
     session_id: Optional[str] = None
     history: List[ChatTurn] = Field(default_factory=list)
     generate_title: bool = False
-    model: Literal["cohere", "maverick"] = "cohere"
+    model: Literal["cohere", "maverick", "gpt-5.2"] = "cohere"
 
 
 class ChatModelOption(BaseModel):
-    key: Literal["cohere", "maverick"]
+    key: Literal["cohere", "maverick", "gpt-5.2"]
     label: str
     is_default: bool = False
 
@@ -84,7 +84,7 @@ def _process_ask(
     started_at = time.perf_counter()
     response = answer_query(
         query=query,
-        top_k=payload.top_k or 5,
+        top_k=payload.top_k or 2,
         history=history_payload,
         model=payload.model,
         generate_title=payload.generate_title,
@@ -114,6 +114,7 @@ def list_chat_models():
         "models": [
             {"key": "cohere", "label": "Cohere (Default)", "is_default": True},
             {"key": "maverick", "label": "Maverick", "is_default": False},
+            {"key": "gpt-5.2", "label": "GPT-5.2", "is_default": False},
         ]
     }
 
@@ -144,4 +145,10 @@ def ask_endpoint(payload: RAGRequest):
         raise
     except Exception as e:
         logger.exception(f"Error in RAG query: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Failed to process ask request.",
+                "error": "Internal server error while generating response.",
+            },
+        )
