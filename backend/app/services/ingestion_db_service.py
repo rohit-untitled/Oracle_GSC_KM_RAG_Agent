@@ -6,7 +6,6 @@ from app.services.vector_store_service import close_connection, get_connection
 
 logger = logging.getLogger(__name__)
 
-TABLE_PROJECTS = "XXGSC_KM_PROJECTS"
 TABLE_BATCH = "XXGSC_KM_INGESTION_BATCH"
 TABLE_RUN = "XXGSC_KM_INGESTION_RUN"
 TABLE_DOCUMENTS = "XXGSC_KM_DOCUMENTS"
@@ -22,125 +21,6 @@ def _lob_to_str(value: Any) -> Any:
 
 def _release(conn) -> None:
     close_connection(conn)
-
-
-def get_or_create_project(project: Dict[str, Any], created_by: str) -> Dict[str, str]:
-    project_name = (project.get("project_name") or "DEFAULT_PROJECT").strip()
-    if not project_name:
-        raise ValueError("project_name is required")
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    try:
-        cur.execute(
-            f"SELECT PROJECT_ID FROM {TABLE_PROJECTS} WHERE PROJECT_NAME = :project_name FETCH FIRST 1 ROWS ONLY",
-            {"project_name": project_name},
-        )
-        row = cur.fetchone()
-        if row:
-            return {"project_id": row[0], "project_name": project_name}
-
-        cur.execute(
-            f"""
-            INSERT INTO {TABLE_PROJECTS} (
-                PROJECT_ID,
-                PROJECT_NAME,
-                GEOGRAPHY_CODE,
-                VERTICAL_CODE,
-                ENGAGEMENT_TYPE,
-                CONFIDENTIALITY,
-                CREATED_BY,
-                CREATED_DATE,
-                LAST_UPDATED_BY,
-                LAST_UPDATED_DATE
-            ) VALUES (
-                RAWTOHEX(SYS_GUID()),
-                :project_name,
-                :geography_code,
-                :vertical_code,
-                :engagement_type,
-                :confidentiality,
-                :created_by,
-                CURRENT_TIMESTAMP,
-                :created_by,
-                CURRENT_TIMESTAMP
-            )
-            RETURNING PROJECT_ID INTO :project_id
-            """,
-            {
-                "project_name": project_name,
-                "geography_code": project.get("geography_code"),
-                "vertical_code": project.get("vertical_code"),
-                "engagement_type": project.get("engagement_type"),
-                "confidentiality": project.get("confidentiality"),
-                "created_by": created_by,
-                "project_id": cur.var(str),
-            },
-        )
-        project_id = cur.getimplicitresults() if False else None
-        conn.commit()
-
-        cur.execute(
-            f"SELECT PROJECT_ID FROM {TABLE_PROJECTS} WHERE PROJECT_NAME = :project_name FETCH FIRST 1 ROWS ONLY",
-            {"project_name": project_name},
-        )
-        inserted = cur.fetchone()
-        return {"project_id": inserted[0], "project_name": project_name}
-    finally:
-        cur.close()
-        _release(conn)
-
-
-def create_ingestion_batch(source_system: str, requested_by: str, total_documents: int) -> str:
-    conn = get_connection()
-    cur = conn.cursor()
-
-    try:
-        batch_id_var = cur.var(str)
-        cur.execute(
-            f"""
-            INSERT INTO {TABLE_BATCH} (
-                BATCH_ID,
-                SOURCE_SYSTEM,
-                REQUESTED_BY,
-                REQUESTED_AT,
-                STATUS,
-                TOTAL_DOCUMENTS,
-                SUCCESSFUL_DOCUMENTS,
-                FAILED_DOCUMENTS,
-                CREATED_BY,
-                CREATION_DATE,
-                LAST_UPDATED_BY,
-                LAST_UPDATE_DATE
-            ) VALUES (
-                RAWTOHEX(SYS_GUID()),
-                :source_system,
-                :requested_by,
-                CURRENT_TIMESTAMP,
-                'IN_PROGRESS',
-                :total_documents,
-                0,
-                0,
-                :requested_by,
-                CURRENT_TIMESTAMP,
-                :requested_by,
-                CURRENT_TIMESTAMP
-            )
-            RETURNING BATCH_ID INTO :batch_id
-            """,
-            {
-                "source_system": source_system,
-                "requested_by": requested_by,
-                "total_documents": total_documents,
-                "batch_id": batch_id_var,
-            },
-        )
-        conn.commit()
-        return batch_id_var.getvalue()[0]
-    finally:
-        cur.close()
-        _release(conn)
 
 
 def create_ingestion_run(batch_id: str, triggered_by: str, total_documents: int) -> str:
@@ -196,95 +76,20 @@ def create_ingestion_run(batch_id: str, triggered_by: str, total_documents: int)
         _release(conn)
 
 
-def create_document_record(
-    project_id: str,
-    batch_id: str,
-    file_name: str,
-    requested_by: str,
-    *,
-    object_name: Optional[str] = None,
-    bucket_name: Optional[str] = None,
-    namespace_name: Optional[str] = None,
-    object_uri: Optional[str] = None,
-    module_code: Optional[str] = None,
-    doc_type_code: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    file_hash: Optional[str] = None,
-    content_hash: Optional[str] = None,
-    status: str = "IN_PROGRESS",
-) -> str:
+def get_document_created_by(document_id: str) -> Optional[str]:
     conn = get_connection()
     cur = conn.cursor()
-
     try:
-        document_id_var = cur.var(str)
         cur.execute(
             f"""
-            INSERT INTO {TABLE_DOCUMENTS} (
-                DOCUMENT_ID,
-                PROJECT_ID,
-                FILE_NAME,
-                DOC_TYPE_CODE,
-                MODULE_CODE,
-                STATUS,
-                RAG_COMPLIANT_FLAG,
-                MIME_TYPE,
-                CREATED_BY,
-                CREATED_DATE,
-                LAST_UPDATED_BY,
-                LAST_UPDATED_DATE,
-                ATTRIBUTE1,
-                ATTRIBUTE2,
-                ORIGINAL_FILE_NAME,
-                OBJECT_NAME,
-                BUCKET_NAME,
-                NAMESPACE_NAME,
-                OBJECT_URI,
-                INGESTION_BATCH_ID
-            ) VALUES (
-                RAWTOHEX(SYS_GUID()),
-                :project_id,
-                :file_name,
-                :doc_type_code,
-                :module_code,
-                :status,
-                'Y',
-                :mime_type,
-                :requested_by,
-                CURRENT_TIMESTAMP,
-                :requested_by,
-                CURRENT_TIMESTAMP,
-                :file_hash,
-                :content_hash,
-                :file_name,
-                :object_name,
-                :bucket_name,
-                :namespace_name,
-                :object_uri,
-                :batch_id
-            )
-            RETURNING DOCUMENT_ID INTO :document_id
+            SELECT CREATED_BY
+            FROM {TABLE_DOCUMENTS}
+            WHERE DOCUMENT_ID = :document_id
             """,
-            {
-                "project_id": project_id,
-                "file_name": file_name,
-                "doc_type_code": doc_type_code,
-                "module_code": module_code,
-                "mime_type": mime_type,
-                "requested_by": requested_by,
-                "status": status,
-                "file_hash": file_hash,
-                "content_hash": content_hash,
-                "object_name": object_name,
-                "bucket_name": bucket_name,
-                "namespace_name": namespace_name,
-                "object_uri": object_uri,
-                "batch_id": batch_id,
-                "document_id": document_id_var,
-            },
+            {"document_id": document_id},
         )
-        conn.commit()
-        return document_id_var.getvalue()[0]
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
     finally:
         cur.close()
         _release(conn)
@@ -332,6 +137,42 @@ def create_document_version(document_id: str, object_name: str, created_by: str,
         )
         conn.commit()
         return version_id_var.getvalue()[0]
+    finally:
+        cur.close()
+        _release(conn)
+
+
+def get_current_document_version(document_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"""
+            SELECT
+                DOCUMENT_VERSION_ID,
+                VERSION_NO,
+                OBJECT_NAME,
+                IS_CURRENT,
+                VALID_FROM,
+                VALID_TO
+            FROM {TABLE_DOCUMENT_VERSION}
+            WHERE DOCUMENT_ID = :document_id
+              AND IS_CURRENT = 'Y'
+            FETCH FIRST 1 ROWS ONLY
+            """,
+            {"document_id": document_id},
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "document_version_id": row[0],
+            "version_no": row[1],
+            "object_name": row[2],
+            "is_current": row[3],
+            "valid_from": str(row[4]) if row[4] else None,
+            "valid_to": str(row[5]) if row[5] else None,
+        }
     finally:
         cur.close()
         _release(conn)
@@ -562,11 +403,10 @@ def get_documents_for_batch(batch_id: str) -> list[Dict[str, Any]]:
                 DOC_TYPE_CODE,
                 MODULE_CODE,
                 MIME_TYPE,
-                OBJECT_NAME,
-                BUCKET_NAME,
-                NAMESPACE_NAME
+                OBJECT_NAME
             FROM {TABLE_DOCUMENTS}
             WHERE INGESTION_BATCH_ID = :batch_id
+              AND STATUS IN ('READY', 'FAILED')
             ORDER BY CREATED_DATE DESC
             """,
             {"batch_id": batch_id},
@@ -582,8 +422,6 @@ def get_documents_for_batch(batch_id: str) -> list[Dict[str, Any]]:
                 "module_code": row[5],
                 "mime_type": row[6],
                 "object_name": row[7],
-                "bucket_name": row[8],
-                "namespace_name": row[9],
             }
             for row in rows
         ]
@@ -616,11 +454,10 @@ def get_documents_for_batch_by_ids(batch_id: str, document_ids: list[str]) -> li
                 DOC_TYPE_CODE,
                 MODULE_CODE,
                 MIME_TYPE,
-                OBJECT_NAME,
-                BUCKET_NAME,
-                NAMESPACE_NAME
+                OBJECT_NAME
             FROM {TABLE_DOCUMENTS}
             WHERE INGESTION_BATCH_ID = :batch_id
+              AND STATUS IN ('READY', 'FAILED')
               AND DOCUMENT_ID IN ({', '.join(bind_names)})
             ORDER BY CREATED_DATE DESC
             """,
@@ -637,11 +474,81 @@ def get_documents_for_batch_by_ids(batch_id: str, document_ids: list[str]) -> li
                 "module_code": row[5],
                 "mime_type": row[6],
                 "object_name": row[7],
-                "bucket_name": row[8],
-                "namespace_name": row[9],
             }
             for row in rows
         ]
+    finally:
+        cur.close()
+        _release(conn)
+
+
+def get_ready_documents(limit: int = 20) -> list[Dict[str, Any]]:
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"""
+            SELECT
+                d.DOCUMENT_ID,
+                d.PROJECT_ID,
+                d.INGESTION_BATCH_ID,
+                d.FILE_NAME,
+                d.STATUS,
+                d.DOC_TYPE_CODE,
+                d.MODULE_CODE,
+                d.MIME_TYPE,
+                d.OBJECT_NAME,
+                d.CREATED_BY,
+                b.REQUESTED_BY
+            FROM {TABLE_DOCUMENTS} d
+            LEFT JOIN {TABLE_BATCH} b
+              ON b.BATCH_ID = d.INGESTION_BATCH_ID
+            WHERE d.STATUS = 'READY'
+              AND d.OBJECT_NAME IS NOT NULL
+            ORDER BY d.CREATED_DATE ASC
+            FETCH FIRST :limit ROWS ONLY
+            """,
+            {"limit": limit},
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "document_id": row[0],
+                "project_id": row[1],
+                "batch_id": row[2],
+                "file_name": row[3],
+                "status": row[4],
+                "doc_type_code": row[5],
+                "module_code": row[6],
+                "mime_type": row[7],
+                "object_name": row[8],
+                "created_by": row[9],
+                "requested_by": row[10],
+            }
+            for row in rows
+        ]
+    finally:
+        cur.close()
+        _release(conn)
+
+
+def claim_ready_document(document_id: str, updated_by: str) -> bool:
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"""
+            UPDATE {TABLE_DOCUMENTS}
+            SET STATUS = 'IN_PROGRESS',
+                LAST_UPDATED_BY = :updated_by,
+                LAST_UPDATED_DATE = CURRENT_TIMESTAMP
+            WHERE DOCUMENT_ID = :document_id
+              AND STATUS = 'READY'
+            """,
+            {"updated_by": updated_by, "document_id": document_id},
+        )
+        conn.commit()
+        return cur.rowcount == 1
     finally:
         cur.close()
         _release(conn)
@@ -836,12 +743,6 @@ def delete_document_completely(document_id: str) -> Dict[str, int]:
     finally:
         cur.close()
         _release(conn)
-
-
-def compute_object_uri(namespace_name: Optional[str], bucket_name: Optional[str], object_name: Optional[str]) -> Optional[str]:
-    if not namespace_name or not bucket_name or not object_name:
-        return None
-    return f"oci://{bucket_name}@{namespace_name}/{object_name}"
 
 
 def make_deterministic_chunk_id(document_id: str, chunk_index: int, chunk_text: str) -> str:

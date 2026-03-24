@@ -1,6 +1,8 @@
 import hashlib
 import logging
 import mimetypes
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +15,7 @@ from app.services.docx_extractor import extract_text_with_formatting_in_sequence
 from app.services.document_loader import load_docx_files
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.ingestion_db_service import (
+    claim_ready_document,
     compute_sha256_text,
     create_document_version,
     create_ingestion_run,
@@ -20,15 +23,18 @@ from app.services.ingestion_db_service import (
     finalize_ingestion_batch,
     finalize_ingestion_run,
     find_current_document_version,
+    finish_step_log,
     get_batch_status,
+    get_document_created_by,
+    get_current_document_version,
     get_documents_for_batch,
     get_documents_for_batch_by_ids,
+    get_ready_documents,
     list_documents_by_batch,
     list_document_steps,
     make_deterministic_chunk_id,
     mark_document_status,
     start_step_log,
-    finish_step_log,
     supersede_document,
 )
 from app.services.oci_downloader import download_all_from_bucket, download_object
@@ -42,6 +48,9 @@ logger = logging.getLogger("KM Knowledge Agent is Working")
 
 DEFAULT_BUCKET = get_env("BUCKET_NAME")
 DEFAULT_NAMESPACE = get_env("OCI_NAMESPACE")
+AUTO_INGEST_ENABLED = (get_env("AUTO_INGEST_ENABLED", "true") or "true").strip().lower() in {"1", "true", "yes", "y"}
+AUTO_INGEST_POLL_SECONDS = int(get_env("AUTO_INGEST_POLL_SECONDS", "30"))
+AUTO_INGEST_BATCH_SIZE = int(get_env("AUTO_INGEST_BATCH_SIZE", "10"))
 DEFAULT_CHUNK_MAX_TOKENS = 300
 DEFAULT_CHUNK_OVERLAP_TOKENS = 40
 
@@ -130,17 +139,27 @@ def _process_document(
 ) -> Dict[str, Any]:
     document_id = doc.get("document_id")
     file_name = doc.get("file_name")
-    object_name = doc.get("object_name") or file_name
-    bucket_name = doc.get("bucket_name") or DEFAULT_BUCKET
-    namespace_name = doc.get("namespace_name") or DEFAULT_NAMESPACE
-    local_path = download_object(object_name, bucket_name=bucket_name, namespace_name=namespace_name)
+    object_name = doc.get("object_name")
+    if not document_id:
+        raise ValueError("document_id is missing for ingestion document")
+    if not file_name:
+        raise ValueError(f"file_name is missing for document {document_id}")
+    if not object_name:
+        raise ValueError(f"OBJECT_NAME is missing in DB for document {document_id}")
+
+    local_path = download_object(
+        object_name,
+        bucket_name=DEFAULT_BUCKET,
+        namespace_name=DEFAULT_NAMESPACE,
+    )
     mime_type = doc.get("mime_type") or mimetypes.guess_type(file_name)[0]
 
     file_hash = _compute_file_hash(local_path)
     extracted_text = _extract_document_text(local_path)
     content_hash = compute_sha256_text(extracted_text)
 
-    existing = find_current_document_version(project_id, object_name, file_name)
+    existing = find_current_document_version(project_id, object_name, file_name) if project_id else None
+    current_version = get_current_document_version(document_id)
     if existing and existing.get("document_id") != document_id:
         if existing.get("file_hash") == file_hash and existing.get("content_hash") == content_hash:
             return {
@@ -155,7 +174,8 @@ def _process_document(
     else:
         next_version = 1
 
-    create_document_version(document_id, object_name, requested_by, next_version)
+    if current_version is None and (existing is None or existing.get("document_id") != document_id or next_version == 1):
+        create_document_version(document_id, object_name, requested_by, next_version)
 
     try:
         mark_document_status(document_id, "IN_PROGRESS", requested_by)
@@ -366,6 +386,79 @@ def _process_batch_documents(payload: IngestionApiRequest, batch_id: str, run_id
 
     finalize_ingestion_run(run_id, successful_documents, failed_documents, payload.requested_by)
     finalize_ingestion_batch(batch_id, successful_documents, failed_documents, payload.requested_by)
+
+
+def process_ready_documents_once(triggered_by: str = "AUTO_WORKER") -> Dict[str, int]:
+    ready_docs = get_ready_documents(limit=AUTO_INGEST_BATCH_SIZE)
+    claimed = 0
+    processed = 0
+    completed = 0
+    failed = 0
+
+    for doc in ready_docs:
+        document_id = doc.get("document_id")
+        batch_id = doc.get("batch_id")
+        requested_by = doc.get("created_by") or doc.get("requested_by") or get_document_created_by(document_id) or triggered_by
+        if not document_id or not batch_id:
+            continue
+
+        if not claim_ready_document(document_id, requested_by):
+            continue
+
+        claimed += 1
+        run_id = create_ingestion_run(batch_id, requested_by, 1)
+        result = _process_document(
+            doc,
+            batch_id=batch_id,
+            run_id=run_id,
+            project_id=doc.get("project_id"),
+            requested_by=requested_by,
+            anonymize_docs=True,
+            chunk_max_tokens=DEFAULT_CHUNK_MAX_TOKENS,
+            chunk_overlap_tokens=DEFAULT_CHUNK_OVERLAP_TOKENS,
+        )
+        processed += 1
+
+        if result.get("status") in {"COMPLETED", "SKIPPED_DUPLICATE"}:
+            completed += 1
+            finalize_ingestion_run(run_id, 1, 0, requested_by)
+            finalize_ingestion_batch(batch_id, 1, 0, requested_by)
+        else:
+            failed += 1
+            finalize_ingestion_run(run_id, 0, 1, requested_by)
+            finalize_ingestion_batch(batch_id, 0, 1, requested_by)
+
+    return {
+        "ready_found": len(ready_docs),
+        "claimed": claimed,
+        "processed": processed,
+        "completed": completed,
+        "failed": failed,
+    }
+
+
+def start_auto_ingestion_worker() -> None:
+    if not AUTO_INGEST_ENABLED:
+        logger.info("Auto ingestion worker is disabled")
+        return
+
+    def _worker_loop() -> None:
+        logger.info(
+            "Auto ingestion poller started | poll_seconds=%s batch_size=%s",
+            AUTO_INGEST_POLL_SECONDS,
+            AUTO_INGEST_BATCH_SIZE,
+        )
+        while True:
+            try:
+                stats = process_ready_documents_once(triggered_by="AUTO_WORKER")
+                if stats.get("processed"):
+                    logger.info("Auto ingestion worker cycle: %s", stats)
+            except Exception:
+                logger.exception("Auto ingestion worker cycle failed")
+            time.sleep(AUTO_INGEST_POLL_SECONDS)
+
+    thread = threading.Thread(target=_worker_loop, name="auto-ingestion-worker", daemon=True)
+    thread.start()
 
 
 @router.post("/ingestion/start")
