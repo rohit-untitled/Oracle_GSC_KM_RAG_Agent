@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.services.anonymize_service import anonymize_markdown
 from app.services.chunk_service import _chunk_blocks, _merge_consecutive_tables, _parse_markdown_blocks
-from app.services.docx_extractor import extract_text_with_formatting_in_sequence
+from app.services.extractors.document_extractor_service import extract_text_with_formatting_in_sequence
 from app.services.document_loader import load_docx_files
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.ingestion_db_service import (
@@ -140,28 +140,63 @@ def _process_document(
     document_id = doc.get("document_id")
     file_name = doc.get("file_name")
     object_name = doc.get("object_name")
-    if not document_id:
-        raise ValueError("document_id is missing for ingestion document")
-    if not file_name:
-        raise ValueError(f"file_name is missing for document {document_id}")
-    if not object_name:
-        raise ValueError(f"OBJECT_NAME is missing in DB for document {document_id}")
+    try:
+        mark_document_status(document_id, "IN_PROGRESS", requested_by)
 
-    local_path = download_object(
-        object_name,
-        bucket_name=DEFAULT_BUCKET,
-        namespace_name=DEFAULT_NAMESPACE,
-    )
-    mime_type = doc.get("mime_type") or mimetypes.guess_type(file_name)[0]
+        def _prepare_document() -> Dict[str, Any]:
+            if not document_id:
+                raise ValueError("document_id is missing for ingestion document")
+            if not file_name:
+                raise ValueError(f"file_name is missing for document {document_id}")
+            if not object_name:
+                raise ValueError(f"OBJECT_NAME is missing in DB for document {document_id}")
 
-    file_hash = _compute_file_hash(local_path)
-    extracted_text = _extract_document_text(local_path)
-    content_hash = compute_sha256_text(extracted_text)
+            local_path = download_object(
+                object_name,
+                bucket_name=DEFAULT_BUCKET,
+                namespace_name=DEFAULT_NAMESPACE,
+            )
+            resolved_mime_type = doc.get("mime_type") or mimetypes.guess_type(file_name)[0]
+            file_hash = _compute_file_hash(local_path)
+            extracted_text = _extract_document_text(local_path)
+            content_hash = compute_sha256_text(extracted_text)
 
-    existing = find_current_document_version(project_id, object_name, file_name) if project_id else None
-    current_version = get_current_document_version(document_id)
-    if existing and existing.get("document_id") != document_id:
-        if existing.get("file_hash") == file_hash and existing.get("content_hash") == content_hash:
+            existing = find_current_document_version(project_id, object_name, file_name) if project_id else None
+            current_version = get_current_document_version(document_id)
+            if existing and existing.get("document_id") != document_id:
+                if existing.get("file_hash") == file_hash and existing.get("content_hash") == content_hash:
+                    return {
+                        "duplicate": True,
+                        "mime_type": resolved_mime_type,
+                        "extracted_text": extracted_text,
+                    }
+
+                supersede_document(existing["document_id"], requested_by)
+                next_version = int(existing.get("version_no") or 1) + 1
+            else:
+                next_version = 1
+
+            if current_version is None and (existing is None or existing.get("document_id") != document_id or next_version == 1):
+                create_document_version(document_id, object_name, requested_by, next_version)
+
+            return {
+                "duplicate": False,
+                "mime_type": resolved_mime_type,
+                "extracted_text": extracted_text,
+            }
+
+        prepare_result = _run_logged_step(
+            run_id=run_id,
+            batch_id=batch_id,
+            document_id=document_id,
+            step_name="PREPARE",
+            step_sequence=1,
+            created_by=requested_by,
+            action=_prepare_document,
+        )
+
+        if prepare_result.get("duplicate"):
+            mark_document_status(document_id, "COMPLETED", requested_by)
             return {
                 "document_id": document_id,
                 "file_name": file_name,
@@ -169,25 +204,8 @@ def _process_document(
                 "message": "Duplicate document detected by file/content hash",
             }
 
-        supersede_document(existing["document_id"], requested_by)
-        next_version = int(existing.get("version_no") or 1) + 1
-    else:
-        next_version = 1
+        extracted_text = prepare_result["extracted_text"]
 
-    if current_version is None and (existing is None or existing.get("document_id") != document_id or next_version == 1):
-        create_document_version(document_id, object_name, requested_by, next_version)
-
-    try:
-        mark_document_status(document_id, "IN_PROGRESS", requested_by)
-        extracted_text = _run_logged_step(
-            run_id=run_id,
-            batch_id=batch_id,
-            document_id=document_id,
-            step_name="EXTRACT",
-            step_sequence=1,
-            created_by=requested_by,
-            action=lambda: extracted_text,
-        )
         processed_text = _run_logged_step(
             run_id=run_id,
             batch_id=batch_id,
@@ -413,7 +431,7 @@ def process_ready_documents_once(triggered_by: str = "AUTO_WORKER") -> Dict[str,
             run_id=run_id,
             project_id=doc.get("project_id"),
             requested_by=requested_by,
-            anonymize_docs=True,
+            anonymize_docs=False,
             chunk_max_tokens=DEFAULT_CHUNK_MAX_TOKENS,
             chunk_overlap_tokens=DEFAULT_CHUNK_OVERLAP_TOKENS,
         )

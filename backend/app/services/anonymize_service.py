@@ -15,9 +15,14 @@ _OCI_REGION = require_env("OCI_REGION")
 _OCI_PROFILE = require_env("CONFIG_PROFILE")
 _OCI_COMPARTMENT_ID = require_env("COMPARTMENT_ID")
 _OCI_MODEL = require_env("OCI_OPENAI_MODEL")
+ANON_ENABLE_LLM = os.getenv("ANON_ENABLE_LLM", "true").strip().lower() in {"1", "true", "yes", "y"}
+ANON_ENABLE_REGEX_FALLBACK = os.getenv("ANON_ENABLE_REGEX_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "y"}
 ANON_MAX_RETRIES = int(os.getenv("ANON_MAX_RETRIES", "5"))
 ANON_MAX_TOKENS = int(os.getenv("ANON_MAX_TOKENS", "4000"))
 ANON_TEMPERATURE = float(os.getenv("ANON_TEMPERATURE", "0"))
+ANON_BATCH_MAX_CHARS = int(os.getenv("ANON_BATCH_MAX_CHARS", "6000"))
+ANON_MAX_CONSECUTIVE_LLM_FAILURES = int(os.getenv("ANON_MAX_CONSECUTIVE_LLM_FAILURES", "3"))
+ANON_MAX_DOC_SECONDS = int(os.getenv("ANON_MAX_DOC_SECONDS", "120"))
 
 
 def _get_oci_client() -> OciOpenAI:
@@ -38,7 +43,7 @@ def _chat_with_retry(call_fn, message: str, max_retries: int = ANON_MAX_RETRIES)
             return call_fn(message)
         except Exception as e:
             last_err = e
-            if not _is_rate_limit_error(e) or attempt == max_retries:
+            if not _is_retryable_error(e) or attempt == max_retries:
                 raise
             _backoff_sleep(attempt)
     raise last_err
@@ -58,6 +63,48 @@ def _is_rate_limit_error(err: Exception) -> bool:
         or '"code": "429"' in text
         or "too many requests" in lowered
         or "rate limit" in lowered
+    )
+
+
+def _is_timeout_error(err: Exception) -> bool:
+    text = str(err).lower()
+    return (
+        "timed out" in text
+        or "timeout" in text
+        or "read timed out" in text
+        or "request timed out" in text
+    )
+
+
+def _is_server_error(err: Exception) -> bool:
+    status = getattr(err, "status", None)
+    if isinstance(status, int) and 500 <= status <= 599:
+        return True
+    text = str(err).lower()
+    return (
+        "internal server error" in text
+        or "bad gateway" in text
+        or "service unavailable" in text
+        or "gateway timeout" in text
+    )
+
+
+def _is_connection_error(err: Exception) -> bool:
+    text = str(err).lower()
+    return (
+        "connection reset" in text
+        or "connection aborted" in text
+        or "connection error" in text
+        or "temporarily unavailable" in text
+    )
+
+
+def _is_retryable_error(err: Exception) -> bool:
+    return (
+        _is_rate_limit_error(err)
+        or _is_timeout_error(err)
+        or _is_server_error(err)
+        or _is_connection_error(err)
     )
 
 
@@ -88,6 +135,9 @@ def _extract_completion_text(completion) -> str:
 
 
 def ai_redact_sensitive_info(text: str) -> str:
+    if not ANON_ENABLE_LLM:
+        raise RuntimeError("LLM anonymization is disabled")
+
     user_message = f"""
 You are a data anonymization system. Your job is to redact sensitive info while preserving the original
 format, structure, and wording as much as possible.
@@ -122,6 +172,9 @@ Anonymized Text:
 
 
 def ai_redact_sensitive_info_batch(texts: List[str]) -> List[str]:
+    if not ANON_ENABLE_LLM:
+        raise RuntimeError("LLM anonymization is disabled")
+
     """
     Batch anonymization. Returns a list of anonymized strings in the same order.
     """
@@ -208,7 +261,7 @@ def _safe_blocklist_fallback(text: str) -> str:
 def _batch_anonymize_texts(
     texts: List[str],
     cache: Optional[Dict[str, str]] = None,
-    max_chars: int = 6000,
+    max_chars: int = ANON_BATCH_MAX_CHARS,
     metrics: Optional[Dict[str, int]] = None,
 ) -> List[str]:
     if cache is None:
@@ -233,24 +286,46 @@ def _batch_anonymize_texts(
     batch: List[str] = []
     batch_indices: List[int] = []
     batch_len = 0
+    consecutive_llm_failures = 0
+    started_at = time.time()
 
     def _flush_batch():
-        nonlocal batch, batch_indices, batch_len
+        nonlocal batch, batch_indices, batch_len, consecutive_llm_failures
         if not batch:
             return
         try:
             anonymized = ai_redact_sensitive_info_batch(batch)
             if not isinstance(anonymized, list) or len(anonymized) != len(batch):
                 raise ValueError("Invalid anonymization batch response length/type")
+            consecutive_llm_failures = 0
         except Exception as e:
             logger.warning("Batch anonymization failed; applying fallback path: %s", e)
             if metrics is not None:
                 metrics["batch_failures"] = metrics.get("batch_failures", 0) + 1
+            consecutive_llm_failures += 1
             anonymized = []
             for item in batch:
+                use_regex_only = (
+                    not ANON_ENABLE_LLM
+                    or not ANON_ENABLE_REGEX_FALLBACK
+                    or consecutive_llm_failures >= ANON_MAX_CONSECUTIVE_LLM_FAILURES
+                    or (time.time() - started_at) >= ANON_MAX_DOC_SECONDS
+                )
+
+                if (time.time() - started_at) >= ANON_MAX_DOC_SECONDS and metrics is not None:
+                    metrics["doc_budget_fallbacks"] = metrics.get("doc_budget_fallbacks", 0) + 1
+
+                if consecutive_llm_failures >= ANON_MAX_CONSECUTIVE_LLM_FAILURES and metrics is not None:
+                    metrics["circuit_breaker_fallbacks"] = metrics.get("circuit_breaker_fallbacks", 0) + 1
+
+                if use_regex_only:
+                    anonymized.append(_regex_redact_sensitive_info(item) if ANON_ENABLE_REGEX_FALLBACK else item)
+                    continue
+
                 try:
                     anonymized.append(ai_redact_sensitive_info(item))
                 except Exception as e_item:
+                    consecutive_llm_failures += 1
                     if _is_output_blocklist_error(e_item):
                         logger.warning("Output blocklist hit during anonymization; using regex fallback.")
                         if metrics is not None:
@@ -260,7 +335,7 @@ def _batch_anonymize_texts(
                         logger.warning("Per-item anonymization failed; using regex fallback: %s", e_item)
                         if metrics is not None:
                             metrics["regex_fallbacks"] = metrics.get("regex_fallbacks", 0) + 1
-                        anonymized.append(_regex_redact_sensitive_info(item))
+                        anonymized.append(_regex_redact_sensitive_info(item) if ANON_ENABLE_REGEX_FALLBACK else item)
         for idx, anon in zip(batch_indices, anonymized):
             cache[ texts[idx].strip() ] = anon
             results[idx] = anon
@@ -435,6 +510,8 @@ def anonymize_markdown_files(extracted_dir: str):
         "batch_failures": 0,
         "blocklist_fallbacks": 0,
         "regex_fallbacks": 0,
+        "circuit_breaker_fallbacks": 0,
+        "doc_budget_fallbacks": 0,
     }
     cache: Dict[str, str] = {}
     for root, _, files in os.walk(extracted_dir):
