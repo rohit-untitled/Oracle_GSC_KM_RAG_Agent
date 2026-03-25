@@ -431,7 +431,7 @@ def process_ready_documents_once(triggered_by: str = "AUTO_WORKER") -> Dict[str,
             run_id=run_id,
             project_id=doc.get("project_id"),
             requested_by=requested_by,
-            anonymize_docs=False,
+            anonymize_docs=True,
             chunk_max_tokens=DEFAULT_CHUNK_MAX_TOKENS,
             chunk_overlap_tokens=DEFAULT_CHUNK_OVERLAP_TOKENS,
         )
