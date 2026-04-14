@@ -23,14 +23,15 @@ EXPECTED_VECTOR_DIM = int(get_env("VECTOR_DIM", "1536"))
 class OCIEmbeddingService:
 
     def __init__(self):
-        logger.info("Loading OCI config profile ")
+        logger.info("Loading OCI embedding config profile")
 
         config_profile = require_env("CONFIG_PROFILE")
         oci_config_path = get_env("OCI_CONFIG_PATH", os.path.expanduser("~/.oci/config"))
         self.config = oci.config.from_file(oci_config_path, profile_name=config_profile)
         self.endpoint = require_env("ENDPOINT")
+        self.config_profile = config_profile
+        self.oci_config_path = oci_config_path
 
-        logger.info("Initializing OCI Generative AI Client...")
         self.client = GenerativeAiInferenceClient(
             config=self.config,
             service_endpoint=self.endpoint,
