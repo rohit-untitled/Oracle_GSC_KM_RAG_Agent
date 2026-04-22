@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 EMBED_MODEL_ID = require_env("EMBED_MODEL_ID")
 EXPECTED_VECTOR_DIM = int(get_env("VECTOR_DIM", "1536"))
+EMBED_BATCH_MAX_INPUTS = int(get_env("EMBED_BATCH_MAX_INPUTS", "90"))
 
 
 class OCIEmbeddingService:
@@ -98,11 +99,14 @@ class OCIEmbeddingService:
         if not batch_texts:
             return vectors
 
-        # Try batch embed for remaining
+        # Try batch embed for remaining using safe sub-batches
         try:
-            batch_vectors = self._embed_batch_with_retry(batch_texts)
-            for idx, emb in zip(batch_indices, batch_vectors):
-                vectors[idx] = emb
+            for start in range(0, len(batch_texts), EMBED_BATCH_MAX_INPUTS):
+                sub_batch_texts = batch_texts[start : start + EMBED_BATCH_MAX_INPUTS]
+                sub_batch_indices = batch_indices[start : start + EMBED_BATCH_MAX_INPUTS]
+                batch_vectors = self._embed_batch_with_retry(sub_batch_texts)
+                for idx, emb in zip(sub_batch_indices, batch_vectors):
+                    vectors[idx] = emb
             return vectors
         except Exception as e:
             logger.warning(f"Batch embed failed, falling back to per-item: {e}")

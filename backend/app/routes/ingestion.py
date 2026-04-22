@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from app.services.anonymize_service import anonymize_markdown
 from app.services.chunk_service import _chunk_blocks, _merge_consecutive_tables, _parse_markdown_blocks
 from app.services.extractors.document_extractor_service import extract_text_with_formatting_in_sequence
+from app.services.extractors.excel_extractor import extract_excel_workbook, workbook_record_to_ingestion_records
 from app.services.document_loader import load_docx_files
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.ingestion_db_service import (
@@ -110,6 +111,32 @@ def _chunk_text(text: str, max_tokens: int, overlap_tokens: int) -> List[Dict[st
     return _chunk_blocks(blocks, max_tokens=max_tokens, overlap_tokens=overlap_tokens)
 
 
+def _prepare_excel_chunks(local_path: str, document_id: str, file_name: str) -> List[Dict[str, Any]]:
+    workbook_record = extract_excel_workbook(local_path)
+    ingestion_records = workbook_record_to_ingestion_records(workbook_record)
+
+    prepared_chunks: List[Dict[str, Any]] = []
+    for idx, record in enumerate(ingestion_records):
+        chunk_text = record.text
+        metadata = dict(record.metadata)
+        metadata.setdefault("source_file", file_name)
+        prepared_chunks.append(
+            {
+                "chunk_id": make_deterministic_chunk_id(document_id, idx, chunk_text),
+                "chunk_index": idx,
+                "heading": f"Sheet: {metadata.get('sheet_name')}" if metadata.get("sheet_name") else "Excel Row",
+                "source_file": file_name,
+                "document_type": "excel",
+                "sheet_name": metadata.get("sheet_name"),
+                "row_number": metadata.get("row_number"),
+                "metadata": metadata,
+                "chunk": chunk_text,
+            }
+        )
+
+    return prepared_chunks
+
+
 def _embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not chunks:
         return []
@@ -157,8 +184,12 @@ def _process_document(
                 namespace_name=DEFAULT_NAMESPACE,
             )
             resolved_mime_type = doc.get("mime_type") or mimetypes.guess_type(file_name)[0]
+            file_ext = Path(local_path).suffix.lower()
             file_hash = _compute_file_hash(local_path)
-            extracted_text = _extract_document_text(local_path)
+            excel_chunks = _prepare_excel_chunks(local_path, document_id, file_name) if file_ext in {".xlsx", ".xlsm"} else None
+            extracted_text = _extract_document_text(local_path) if excel_chunks is None else "\n\n".join(
+                chunk.get("chunk", "") for chunk in excel_chunks
+            )
             content_hash = compute_sha256_text(extracted_text)
 
             existing = find_current_document_version(project_id, object_name, file_name) if project_id else None
@@ -169,6 +200,7 @@ def _process_document(
                         "duplicate": True,
                         "mime_type": resolved_mime_type,
                         "extracted_text": extracted_text,
+                        "excel_chunks": excel_chunks,
                     }
 
                 supersede_document(existing["document_id"], requested_by)
@@ -183,6 +215,7 @@ def _process_document(
                 "duplicate": False,
                 "mime_type": resolved_mime_type,
                 "extracted_text": extracted_text,
+                "excel_chunks": excel_chunks,
             }
 
         prepare_result = _run_logged_step(
@@ -205,38 +238,43 @@ def _process_document(
             }
 
         extracted_text = prepare_result["extracted_text"]
+        excel_chunks = prepare_result.get("excel_chunks")
 
-        processed_text = _run_logged_step(
-            run_id=run_id,
-            batch_id=batch_id,
-            document_id=document_id,
-            step_name="ANONYMIZE",
-            step_sequence=2,
-            created_by=requested_by,
-            action=lambda: anonymize_markdown(extracted_text) if anonymize_docs else extracted_text,
-        )
-
-        chunk_rows = _run_logged_step(
-            run_id=run_id,
-            batch_id=batch_id,
-            document_id=document_id,
-            step_name="CHUNK",
-            step_sequence=3,
-            created_by=requested_by,
-            action=lambda: _chunk_text(processed_text, chunk_max_tokens, chunk_overlap_tokens),
-        )
-        prepared_chunks: List[Dict[str, Any]] = []
-        for idx, chunk in enumerate(chunk_rows):
-            chunk_text = chunk.get("chunk", "")
-            prepared_chunks.append(
-                {
-                    "chunk_id": make_deterministic_chunk_id(document_id, idx, chunk_text),
-                    "chunk_index": idx,
-                    "heading": chunk.get("heading"),
-                    "source_file": file_name,
-                    "chunk": chunk_text,
-                }
+        if excel_chunks is not None:
+            processed_text = extracted_text
+            prepared_chunks = excel_chunks
+        else:
+            processed_text = _run_logged_step(
+                run_id=run_id,
+                batch_id=batch_id,
+                document_id=document_id,
+                step_name="ANONYMIZE",
+                step_sequence=2,
+                created_by=requested_by,
+                action=lambda: anonymize_markdown(extracted_text) if anonymize_docs else extracted_text,
             )
+
+            chunk_rows = _run_logged_step(
+                run_id=run_id,
+                batch_id=batch_id,
+                document_id=document_id,
+                step_name="CHUNK",
+                step_sequence=3,
+                created_by=requested_by,
+                action=lambda: _chunk_text(processed_text, chunk_max_tokens, chunk_overlap_tokens),
+            )
+            prepared_chunks: List[Dict[str, Any]] = []
+            for idx, chunk in enumerate(chunk_rows):
+                chunk_text = chunk.get("chunk", "")
+                prepared_chunks.append(
+                    {
+                        "chunk_id": make_deterministic_chunk_id(document_id, idx, chunk_text),
+                        "chunk_index": idx,
+                        "heading": chunk.get("heading"),
+                        "source_file": file_name,
+                        "chunk": chunk_text,
+                    }
+                )
 
         embedded_chunks = _run_logged_step(
             run_id=run_id,

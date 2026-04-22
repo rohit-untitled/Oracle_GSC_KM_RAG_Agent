@@ -23,6 +23,7 @@ VECTOR_DIM = int(get_env("VECTOR_DIM", "1024"))
 
 TABLE_CHUNK = "XXGSC_KM_DOCUMENT_CHUNK"
 TABLE_VECTOR = "XXGSC_KM_CHUNK_VECTOR"
+TABLE_CHUNK_METADATA = "XXGSC_KM_CHUNK_METADATA"
 
 
 def init_oracle():
@@ -126,6 +127,102 @@ def _read_lob_if_needed(value: Any) -> Any:
     return value.read() if hasattr(value, "read") else value
 
 
+def _serialize_metadata_json(metadata: Any) -> Optional[str]:
+    if metadata is None:
+        return None
+    return json.dumps(metadata, ensure_ascii=False, default=str)
+
+
+def _upsert_chunk_metadata(
+    cur,
+    *,
+    chunk_id: str,
+    document_id: str,
+    run_id: str,
+    document_type: Optional[str],
+    source_file: Optional[str],
+    page_number: Optional[int],
+    sheet_name: Optional[str],
+    row_number: Optional[int],
+    metadata_json: Optional[str],
+    created_by: str,
+) -> None:
+    cur.execute(
+        f"""
+        MERGE INTO {TABLE_CHUNK_METADATA} tgt
+        USING (
+            SELECT
+                :chunk_id AS chunk_id,
+                :document_id AS document_id,
+                :run_id AS run_id,
+                :document_type AS document_type,
+                :source_file AS source_file,
+                :page_number AS page_number,
+                :sheet_name AS sheet_name,
+                :row_number AS row_number,
+                :metadata_json AS metadata_json,
+                :created_by AS created_by
+            FROM dual
+        ) src
+        ON (tgt.CHUNK_ID = src.chunk_id)
+        WHEN MATCHED THEN UPDATE SET
+            tgt.DOCUMENT_ID = src.document_id,
+            tgt.RUN_ID = src.run_id,
+            tgt.DOCUMENT_TYPE = src.document_type,
+            tgt.SOURCE_FILE = src.source_file,
+            tgt.PAGE_NUMBER = src.page_number,
+            tgt.SHEET_NAME = src.sheet_name,
+            tgt.ROW_NUMBER = src.row_number,
+            tgt.METADATA_JSON = src.metadata_json,
+            tgt.LAST_UPDATED_BY = src.created_by,
+            tgt.LAST_UPDATE_DATE = CURRENT_TIMESTAMP
+        WHEN NOT MATCHED THEN INSERT (
+            METADATA_ID,
+            CHUNK_ID,
+            DOCUMENT_ID,
+            RUN_ID,
+            DOCUMENT_TYPE,
+            SOURCE_FILE,
+            PAGE_NUMBER,
+            SHEET_NAME,
+            ROW_NUMBER,
+            METADATA_JSON,
+            CREATED_BY,
+            CREATION_DATE,
+            LAST_UPDATED_BY,
+            LAST_UPDATE_DATE
+        ) VALUES (
+            SYS_GUID(),
+            src.chunk_id,
+            src.document_id,
+            src.run_id,
+            src.document_type,
+            src.source_file,
+            src.page_number,
+            src.sheet_name,
+            src.row_number,
+            src.metadata_json,
+            src.created_by,
+            CURRENT_TIMESTAMP,
+            src.created_by,
+            CURRENT_TIMESTAMP
+        )
+        """,
+        {
+            "chunk_id": chunk_id,
+            "document_id": document_id,
+            "run_id": run_id,
+            "document_type": document_type,
+            "source_file": source_file,
+            "page_number": page_number,
+            "sheet_name": sheet_name,
+            "row_number": row_number,
+            "metadata_json": metadata_json,
+            "created_by": created_by,
+        },
+    )
+
+
 def insert_embedding_record(
     chunk_text: str,
     embedding_vector: List[float],
@@ -165,6 +262,13 @@ def insert_embedding_payload(entry: Dict[str, Any]) -> Dict[str, str]:
     chunk_index = entry.get("chunk_index") or 0
     created_by = entry.get("created_by", "KM_RAG_AGENT")
     embedding_string = "[" + ",".join(map(str, emb)) + "]"
+    chunk_metadata = entry.get("metadata") or {}
+    document_type = entry.get("document_type") or chunk_metadata.get("document_type")
+    source_file = entry.get("source_file") or chunk_metadata.get("source_file") or chunk_metadata.get("file_name")
+    page_number = entry.get("page_number") or chunk_metadata.get("page_number")
+    sheet_name = entry.get("sheet_name") or chunk_metadata.get("sheet_name")
+    row_number = entry.get("row_number") or chunk_metadata.get("row_number")
+    metadata_json = _serialize_metadata_json(chunk_metadata)
 
     conn = get_connection()
     cur = conn.cursor()
@@ -287,6 +391,20 @@ def insert_embedding_payload(entry: Dict[str, Any]) -> Dict[str, str]:
             },
         )
 
+        _upsert_chunk_metadata(
+            cur,
+            chunk_id=chunk_id,
+            document_id=document_id,
+            run_id=run_id,
+            document_type=document_type,
+            source_file=source_file,
+            page_number=page_number,
+            sheet_name=sheet_name,
+            row_number=row_number,
+            metadata_json=metadata_json,
+            created_by=created_by,
+        )
+
         conn.commit()
         return {"chunk_id": chunk_id, "status": "upserted"}
     finally:
@@ -331,6 +449,11 @@ def insert_document_embeddings(
             "source_file": entry.get("source_file"),
             "chunk": entry.get("chunk", ""),
             "embedding": entry.get("embedding"),
+            "document_type": entry.get("document_type"),
+            "sheet_name": entry.get("sheet_name"),
+            "row_number": entry.get("row_number"),
+            "page_number": entry.get("page_number"),
+            "metadata": entry.get("metadata"),
             "created_by": created_by,
         }
         insert_embedding_payload(payload)
@@ -339,7 +462,7 @@ def insert_document_embeddings(
     return inserted
 
 
-def search_similar_chunks(query_embedding: List[float], top_k: int = 5) -> List[dict]:
+def search_similar_chunks(query_embedding: List[float], top_k: int = 12) -> List[dict]:
     conn = get_connection()
     cur = conn.cursor()
 

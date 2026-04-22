@@ -8,6 +8,7 @@ from app.services.secure_config import get_env
 HISTORY_TURNS = int(get_env("HISTORY_TURNS", "20"))
 DEFAULT_CHAT_MODEL = "cohere"
 SUPPORTED_CHAT_MODELS = {"cohere", "maverick", "gpt-5.2"}
+DEFAULT_TOP_K = int(get_env("DEFAULT_TOP_K", "12"))
 
 def _limit_title_words(title: str, max_words: int = 5) -> str:
     words = title.strip().split()
@@ -38,7 +39,7 @@ def build_citations_from_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]
 
 def answer_query(
     query: str,
-    top_k: int = 5,
+    top_k: int = DEFAULT_TOP_K,
     history: List[Dict[str, str]] | None = None,
     model: str = DEFAULT_CHAT_MODEL,
     generate_title: bool = False,
@@ -63,9 +64,25 @@ def answer_query(
     for i, h in enumerate(hits):
         metadata = h.get("metadata", {}) or {}
         source_file = metadata.get("source_file") or f"Document_{i+1}.docx"
+        heading = metadata.get("heading") or "[no heading]"
+        sheet_name = metadata.get("sheet_name")
+        row_start = metadata.get("row_start")
+        row_end = metadata.get("row_end")
+        row_range = None
+        if row_start is not None and row_end is not None:
+            row_range = f"Rows: {row_start}-{row_end}"
+        elif metadata.get("row_number") is not None:
+            row_range = f"Row: {metadata.get('row_number')}"
+
+        context_parts = [f"Source: {source_file}", f"Heading: {heading}"]
+        if sheet_name:
+            context_parts.append(f"Sheet: {sheet_name}")
+        if row_range:
+            context_parts.append(row_range)
+
         documents.append({
             "title": source_file,
-            "snippet": h["chunk"]
+            "snippet": " | ".join(context_parts) + "\n" + h["chunk"]
         })
 
     cohere_history = []
@@ -111,7 +128,6 @@ def answer_query(
             chat_history=cohere_history,
             documents=documents,
         )
-
     generated_title = None
     if generate_title and query:
         try:

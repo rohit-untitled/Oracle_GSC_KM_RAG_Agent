@@ -403,7 +403,8 @@ def get_documents_for_batch(batch_id: str) -> list[Dict[str, Any]]:
                 DOC_TYPE_CODE,
                 MODULE_CODE,
                 MIME_TYPE,
-                OBJECT_NAME
+                OBJECT_NAME,
+                ATTRIBUTE1
             FROM {TABLE_DOCUMENTS}
             WHERE INGESTION_BATCH_ID = :batch_id
               AND STATUS IN ('READY', 'FAILED')
@@ -422,6 +423,7 @@ def get_documents_for_batch(batch_id: str) -> list[Dict[str, Any]]:
                 "module_code": row[5],
                 "mime_type": row[6],
                 "object_name": row[7],
+                "attribute1": row[8],
             }
             for row in rows
         ]
@@ -454,7 +456,8 @@ def get_documents_for_batch_by_ids(batch_id: str, document_ids: list[str]) -> li
                 DOC_TYPE_CODE,
                 MODULE_CODE,
                 MIME_TYPE,
-                OBJECT_NAME
+                OBJECT_NAME,
+                ATTRIBUTE1
             FROM {TABLE_DOCUMENTS}
             WHERE INGESTION_BATCH_ID = :batch_id
               AND STATUS IN ('READY', 'FAILED')
@@ -474,6 +477,7 @@ def get_documents_for_batch_by_ids(batch_id: str, document_ids: list[str]) -> li
                 "module_code": row[5],
                 "mime_type": row[6],
                 "object_name": row[7],
+                "attribute1": row[8],
             }
             for row in rows
         ]
@@ -498,13 +502,13 @@ def get_ready_documents(limit: int = 20) -> list[Dict[str, Any]]:
                 d.MODULE_CODE,
                 d.MIME_TYPE,
                 d.OBJECT_NAME,
+                d.ATTRIBUTE1,
                 d.CREATED_BY,
                 b.REQUESTED_BY
             FROM {TABLE_DOCUMENTS} d
             LEFT JOIN {TABLE_BATCH} b
               ON b.BATCH_ID = d.INGESTION_BATCH_ID
             WHERE d.STATUS = 'READY'
-              AND d.OBJECT_NAME IS NOT NULL
             ORDER BY d.CREATED_DATE ASC
             FETCH FIRST :limit ROWS ONLY
             """,
@@ -522,8 +526,9 @@ def get_ready_documents(limit: int = 20) -> list[Dict[str, Any]]:
                 "module_code": row[6],
                 "mime_type": row[7],
                 "object_name": row[8],
-                "created_by": row[9],
-                "requested_by": row[10],
+                "attribute1": row[9],
+                "created_by": row[10],
+                "requested_by": row[11],
             }
             for row in rows
         ]
