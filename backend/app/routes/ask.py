@@ -23,11 +23,12 @@ class ChatTurn(BaseModel):
 
 class RAGRequest(BaseModel):
     query: str
-    top_k: Optional[int] = Field(5, ge=1, le=20)
+    top_k: Optional[int] = Field(None, ge=1, le=50)
     session_id: Optional[str] = None
     history: List[ChatTurn] = Field(default_factory=list)
     generate_title: bool = False
     model: Literal["cohere", "maverick", "gpt-5.2"] = "cohere"
+    mode: Literal["instant", "thinking", "pro"] = "thinking"
 
 
 class ChatModelOption(BaseModel):
@@ -84,10 +85,11 @@ def _process_ask(
     started_at = time.perf_counter()
     response = answer_query(
         query=query,
-        top_k=payload.top_k or 2,
+        top_k=payload.top_k,
         history=history_payload,
         model=payload.model,
         generate_title=payload.generate_title,
+        mode=payload.mode,
     )
     elapsed_seconds = time.perf_counter() - started_at
     return {
@@ -98,6 +100,7 @@ def _process_ask(
         "history_length": response["history_length"],
         "model": response["model_used"],
         "generated_title": response.get("generated_title"),
+        "mode": response.get("retrieval_config", {}).get("mode", payload.mode),
         "time_taken": round(elapsed_seconds, 3),
         "token_usage": {
             "input_tokens_estimated": history_tokens + query_tokens,

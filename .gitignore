@@ -16,7 +16,6 @@ backend/Wallet_POCSOLUTIONSPVTATPKMDEV1
 test.py
 backend/test_connection.py
 backend/test_vector_store.py
-backend/app/services/extractors/excel_extractor.py
 backend/scripts
 DATABASE_DESIGN_DOCUMENTATION.md
 databaseSchema.dbdiagram

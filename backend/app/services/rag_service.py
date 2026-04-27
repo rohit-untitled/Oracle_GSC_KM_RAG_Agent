@@ -1,14 +1,36 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from app.services.oci_llm import call_oci_chat, call_oci_chat_generic, call_oci_chat_maverick, call_oci_title
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.retrieval_service import search_similar_chunks
 from app.services.secure_config import get_env
 
 
-HISTORY_TURNS = int(get_env("HISTORY_TURNS", "20"))
+HISTORY_TURNS = int(get_env("HISTORY_TURNS", "15"))
 DEFAULT_CHAT_MODEL = "cohere"
 SUPPORTED_CHAT_MODELS = {"cohere", "maverick", "gpt-5.2"}
-DEFAULT_TOP_K = int(get_env("DEFAULT_TOP_K", "12"))
+DEFAULT_TOP_K = int(get_env("DEFAULT_TOP_K", "8"))
+
+
+RETRIEVAL_PROFILES = {
+    "instant": {
+        "top_k": 5,
+        "rerank_top_n": 8,
+        "neighbor_radius": 0,
+        "use_hybrid": False,
+    },
+    "thinking": {
+        "top_k": 8,
+        "rerank_top_n": 12,
+        "neighbor_radius": 1,
+        "use_hybrid": True,
+    },
+    "pro": {
+        "top_k": 12,
+        "rerank_top_n": 18,
+        "neighbor_radius": 2,
+        "use_hybrid": True,
+    },
+}
 
 def _limit_title_words(title: str, max_words: int = 5) -> str:
     words = title.strip().split()
@@ -35,14 +57,27 @@ def build_citations_from_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]
         )
     return citations
 
+
+def _resolve_retrieval_profile(mode: str | None, top_k_override: int | None) -> Dict[str, Any]:
+    mode_key = (mode or "thinking").strip().lower()
+    if mode_key not in RETRIEVAL_PROFILES:
+        mode_key = "thinking"
+
+    profile = dict(RETRIEVAL_PROFILES[mode_key])
+    if top_k_override is not None:
+        profile["top_k"] = top_k_override
+    profile["mode"] = mode_key
+    return profile
+
 # MAIN RAG + CONVERSATION FUNCTION
 
 def answer_query(
     query: str,
-    top_k: int = DEFAULT_TOP_K,
+    top_k: int | None = None,
     history: List[Dict[str, str]] | None = None,
     model: str = DEFAULT_CHAT_MODEL,
     generate_title: bool = False,
+    mode: str = "thinking",
 ) -> Dict[str, Any]:
     model_key = (model or DEFAULT_CHAT_MODEL).strip().lower()
     if model_key not in SUPPORTED_CHAT_MODELS:
@@ -58,7 +93,16 @@ def answer_query(
     if not query_embedding:
         raise ValueError("Failed to generate embedding for the query.")
 
-    hits = search_similar_chunks(query_embedding, top_k=top_k)
+    retrieval_profile = _resolve_retrieval_profile(mode, top_k)
+
+    hits = search_similar_chunks(
+        query_embedding,
+        top_k=retrieval_profile["top_k"],
+        query_text=query,
+        rerank_top_n=retrieval_profile["rerank_top_n"],
+        neighbor_radius=retrieval_profile["neighbor_radius"],
+        use_hybrid=retrieval_profile["use_hybrid"],
+    )
 
     documents = []
     for i, h in enumerate(hits):
@@ -143,4 +187,11 @@ def answer_query(
         "history_length": len(incoming_history),
         "model_used": model_key,
         "generated_title": generated_title,
+        "retrieval_config": {
+            "mode": retrieval_profile["mode"],
+            "top_k": retrieval_profile["top_k"],
+            "rerank_top_n": retrieval_profile["rerank_top_n"],
+            "neighbor_radius": retrieval_profile["neighbor_radius"],
+            "use_hybrid": retrieval_profile["use_hybrid"],
+        },
     }
