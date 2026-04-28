@@ -13,6 +13,8 @@ backend/app/data/
 backend/venv/
 backend/Wallet_POCSOLUTIONSATPDEV_Nov_2025
 backend/Wallet_POCSOLUTIONSPVTATPKMDEV1
+backend/gc35322_Wallet_AMDCSDatabase
+test_worksheet.sql
 test.py
 backend/test_connection.py
 backend/test_vector_store.py

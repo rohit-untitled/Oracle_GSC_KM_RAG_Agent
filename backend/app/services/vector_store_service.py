@@ -28,15 +28,25 @@ TABLE_CHUNK_METADATA = "XXGSC_KM_CHUNK_METADATA"
 
 def init_oracle():
     try:
+        mode = (ORACLE_MODE or "thin").strip().lower()
+
         if WALLET_PATH:
             os.environ["TNS_ADMIN"] = WALLET_PATH
             logger.info("TNS_ADMIN set to %s", WALLET_PATH)
 
-        logger.info(
-            "Skipping explicit Oracle client initialization for local wallet-based connectivity test | ORACLE_MODE=%s | INSTANT_CLIENT_PATH=%s",
-            ORACLE_MODE,
-            INSTANT_CLIENT_PATH,
-        )
+        if mode == "thick":
+            if not INSTANT_CLIENT_PATH:
+                raise ValueError(
+                    "ORACLE_MODE is 'thick' but ORACLE_INSTANT_CLIENT is not set"
+                )
+
+            oracledb.init_oracle_client(lib_dir=INSTANT_CLIENT_PATH)
+            logger.info(
+                "Oracle client initialized in thick mode | lib_dir=%s",
+                INSTANT_CLIENT_PATH,
+            )
+        else:
+            logger.info("Oracle client running in thin mode")
     except Exception as e:
         logger.error("Oracle initialization failed: %s", e)
         raise
