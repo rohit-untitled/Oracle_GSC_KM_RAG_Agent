@@ -8,6 +8,7 @@ import os
 from typing import List, Tuple
 
 from oci.generative_ai_inference import GenerativeAiInferenceClient
+from app.services.chunk_service import token_len
 from app.services.secure_config import require_env, get_env
 from oci.generative_ai_inference.models import (
     EmbedTextDetails,
@@ -19,6 +20,25 @@ logger = logging.getLogger(__name__)
 EMBED_MODEL_ID = require_env("EMBED_MODEL_ID")
 EXPECTED_VECTOR_DIM = int(get_env("VECTOR_DIM", "1536"))
 EMBED_BATCH_MAX_INPUTS = int(get_env("EMBED_BATCH_MAX_INPUTS", "90"))
+EMBED_SAFE_MAX_TOKENS = int(get_env("EMBED_SAFE_MAX_TOKENS", "350"))
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def _split_text_for_embedding(text: str) -> Tuple[str, str]:
+    value = _normalize_text(text)
+    if not value:
+        return "", ""
+
+    midpoint = len(value) // 2
+    split_index = value.rfind(" ", 0, midpoint)
+    if split_index <= 0:
+        split_index = value.find(" ", midpoint)
+    if split_index <= 0:
+        return value[:midpoint].strip(), value[midpoint:].strip()
+    return value[:split_index].strip(), value[split_index:].strip()
 
 
 class OCIEmbeddingService:
@@ -58,7 +78,7 @@ class OCIEmbeddingService:
             logger.warning("Empty text received for embedding.")
             return ([], 0) if return_depth else []
 
-        text = re.sub(r"\s+", " ", text).strip()
+        text = _normalize_text(text)
         emb, depth = self._embed_recursive(text)
 
         if return_depth:
@@ -75,21 +95,19 @@ class OCIEmbeddingService:
             if not t or not t.strip():
                 cleaned.append("")
             else:
-                cleaned.append(re.sub(r"\s+", " ", t).strip())
+                cleaned.append(_normalize_text(t))
 
         vectors: List[List[float]] = [[] for _ in cleaned]
         batch_texts: List[str] = []
         batch_indices: List[int] = []
-
-        SAFE_MAX_WORDS = 350
 
         # Pre-filter likely oversized texts to avoid batch failure
         for i, t in enumerate(cleaned):
             if not t:
                 vectors[i] = []
                 continue
-            word_count = len(t.split())
-            if word_count > SAFE_MAX_WORDS:
+            token_count = token_len(t)
+            if token_count > EMBED_SAFE_MAX_TOKENS:
                 emb, _ = self._embed_recursive(t)
                 vectors[i] = emb
             else:
@@ -146,15 +164,11 @@ class OCIEmbeddingService:
             # Too long → split
             logger.warning(f"Text too long → splitting at depth={depth}")
 
-            words = text.split()
-            mid = len(words) // 2
+            part1, part2 = _split_text_for_embedding(text)
 
-            if mid == 0:
+            if not part1 or not part2:
                 logger.error("Cannot split further — too small")
                 return [], depth
-
-            part1 = " ".join(words[:mid])
-            part2 = " ".join(words[mid:])
 
             emb1, d1 = self._embed_recursive(part1, depth + 1)
             emb2, d2 = self._embed_recursive(part2, depth + 1)

@@ -82,19 +82,32 @@ def _get_generic_oci_client() -> GenerativeAiInferenceClient:
     return _OCI_GENERIC_CLIENT
 
 
-_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "system_prompt.txt")
+_PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
 
 
-def _load_system_prompt() -> str:
+def _load_prompt_file(file_name: str) -> str:
+    prompt_path = os.path.join(_PROMPTS_DIR, file_name)
     try:
-        with open(_PROMPT_PATH, "r", encoding="utf-8") as f:
+        with open(prompt_path, "r", encoding="utf-8") as f:
             return f.read().strip()
     except Exception as e:
-        logger.error("Failed to load system prompt from %s: %s", _PROMPT_PATH, e)
+        logger.error("Failed to load prompt from %s: %s", prompt_path, e)
         return "You are a helpful assistant."
 
 
-SYSTEM_PROMPT = _load_system_prompt()
+BASE_SYSTEM_PROMPT = _load_prompt_file("system_prompt_base.txt")
+
+CONFIDENTIALITY_PROMPTS = {
+    "SCM": _load_prompt_file("system_prompt_scm.txt"),
+    "ERP": _load_prompt_file("system_prompt_erp.txt"),
+    "EPM": _load_prompt_file("system_prompt_epm.txt"),
+}
+
+
+def _resolve_system_prompt(confidentiality: str | None = None) -> str:
+    confidentiality_key = (confidentiality or "SCM").strip().upper()
+    persona_prompt = CONFIDENTIALITY_PROMPTS.get(confidentiality_key, CONFIDENTIALITY_PROMPTS["SCM"])
+    return f"{BASE_SYSTEM_PROMPT.strip()}\n\n{persona_prompt.strip()}".strip()
 
 
 def _format_documents_for_context(documents: list | None) -> str:
@@ -161,6 +174,7 @@ def call_oci_chat(
     message: str,
     chat_history: list | None = None,
     documents: list | None = None,
+    confidentiality: str | None = None,
 ) -> str:
     """
     OCI Cohere chat call with RAG + chat history (default model path).
@@ -168,10 +182,11 @@ def call_oci_chat(
 
     try:
         effective_chat_history = []
+        resolved_system_prompt = _resolve_system_prompt(confidentiality)
 
         effective_chat_history.append({
             "role": "SYSTEM",
-            "message": SYSTEM_PROMPT.strip(),
+            "message": resolved_system_prompt,
         })
 
         if chat_history:
@@ -211,12 +226,13 @@ def call_oci_chat_maverick(
     message: str,
     chat_history: list | None = None,
     documents: list | None = None,
+    confidentiality: str | None = None,
 ) -> str:
     """
     OCI OpenAI chat call (Maverick) with RAG + chat history.
     """
     try:
-        messages = [{"role": "system", "content": SYSTEM_PROMPT.strip()}]
+        messages = [{"role": "system", "content": _resolve_system_prompt(confidentiality)}]
 
         doc_context = _format_documents_for_context(documents)
         if doc_context:
@@ -260,12 +276,13 @@ def call_oci_chat_generic(
     message: str,
     chat_history: list | None = None,
     documents: list | None = None,
+    confidentiality: str | None = None,
 ) -> str:
     """
     OCI native GenericChatRequest call with a model OCID.
     """
     try:
-        prompt_parts = [SYSTEM_PROMPT.strip()]
+        prompt_parts = [_resolve_system_prompt(confidentiality)]
 
         doc_context = _format_documents_for_generic_context(
             documents,

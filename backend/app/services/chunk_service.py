@@ -2,9 +2,14 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import nltk
+
+try:
+    import tiktoken  # type: ignore
+except Exception:  # pragma: no cover - optional dependency fallback
+    tiktoken = None
 
 try:
     nltk.data.find("tokenizers/punkt")
@@ -13,8 +18,20 @@ except LookupError:
 
 from nltk.tokenize import sent_tokenize, word_tokenize
 
+_TOKENIZER_ENCODING = None
+if tiktoken is not None:
+    try:
+        _TOKENIZER_ENCODING = tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        _TOKENIZER_ENCODING = None
+
 def token_len(text: str) -> int:
-    return len(word_tokenize(text))
+    value = (text or "").strip()
+    if not value:
+        return 0
+    if _TOKENIZER_ENCODING is not None:
+        return len(_TOKENIZER_ENCODING.encode(value))
+    return max(1, len(value) // 4)
 
 def split_sentence_recursive(sentence: str, max_tokens: int):
     tokens = word_tokenize(sentence)
@@ -44,24 +61,29 @@ def _is_table_alignment_row(line: str) -> bool:
     return bool(re.fullmatch(r"[:\-\s]+", stripped))
 
 
-def _parse_markdown_blocks(md_text: str) -> List[Dict[str, str]]:
+def _parse_markdown_blocks(md_text: str) -> List[Dict[str, Any]]:
     """
     Convert markdown into ordered blocks while preserving structure.
     """
     lines = md_text.splitlines()
-    blocks: List[Dict[str, str]] = []
+    blocks: List[Dict[str, Any]] = []
     current: List[str] = []
     current_heading: Optional[str] = None
+    current_heading_level: Optional[int] = None
     in_code_fence = False
+    block_index = 0
 
     def flush(kind: str = "paragraph"):
-        nonlocal current
+        nonlocal current, block_index
         if current:
             blocks.append({
+                "block_index": block_index,
                 "type": kind,
                 "heading": current_heading or "",
+                "heading_level": current_heading_level,
                 "text": "\n".join(current).strip()
             })
+            block_index += 1
             current = []
 
     for line in lines:
@@ -83,11 +105,15 @@ def _parse_markdown_blocks(md_text: str) -> List[Dict[str, str]]:
         if re.match(r"^#{1,6}\s+", line):
             flush()
             current_heading = line.strip()
+            current_heading_level = len(line) - len(line.lstrip("#"))
             blocks.append({
+                "block_index": block_index,
                 "type": "heading",
                 "heading": current_heading,
+                "heading_level": current_heading_level,
                 "text": current_heading
             })
+            block_index += 1
             continue
 
         if _is_table_line(line):
@@ -96,10 +122,13 @@ def _parse_markdown_blocks(md_text: str) -> List[Dict[str, str]]:
             table_lines = [line]
             # consume consecutive table lines handled in caller loop by appending
             blocks.append({
+                "block_index": block_index,
                 "type": "table",
                 "heading": current_heading or "",
+                "heading_level": current_heading_level,
                 "text": "\n".join(table_lines).strip()
             })
+            block_index += 1
             continue
 
         if not line.strip():
@@ -112,12 +141,15 @@ def _parse_markdown_blocks(md_text: str) -> List[Dict[str, str]]:
     return blocks
 
 
-def _merge_consecutive_tables(blocks: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    merged: List[Dict[str, str]] = []
+def _merge_consecutive_tables(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
     for blk in blocks:
         if merged and blk["type"] == "table" and merged[-1]["type"] == "table":
             merged[-1]["text"] = (merged[-1]["text"] + "\n" + blk["text"]).strip()
+            merged[-1]["block_index_end"] = blk.get("block_index", merged[-1].get("block_index"))
         else:
+            blk = dict(blk)
+            blk.setdefault("block_index_end", blk.get("block_index"))
             merged.append(blk)
     return merged
 
@@ -161,23 +193,57 @@ def _split_block_text(text: str, max_tokens: int) -> List[str]:
 
 
 def _chunk_blocks(
-    blocks: List[Dict[str, str]],
+    blocks: List[Dict[str, Any]],
     max_tokens: int,
     overlap_tokens: int
-) -> List[Dict[str, str]]:
-    chunks: List[Dict[str, str]] = []
+) -> List[Dict[str, Any]]:
+    chunks: List[Dict[str, Any]] = []
     buffer_texts: List[str] = []
     buffer_tokens = 0
     current_heading = ""
+    current_heading_level: Optional[int] = None
+    buffer_types: List[str] = []
+    block_index_start: Optional[int] = None
+    block_index_end: Optional[int] = None
+
+    def _resolve_chunk_type(types: List[str]) -> str:
+        normalized = [t for t in types if t and t != "heading"]
+        if not normalized:
+            return "heading"
+        unique = set(normalized)
+        if len(unique) == 1:
+            return normalized[0]
+        return "mixed"
 
     def flush():
-        nonlocal buffer_texts, buffer_tokens
+        nonlocal buffer_texts, buffer_tokens, buffer_types, block_index_start, block_index_end
         if not buffer_texts:
             return
         chunk_text = "\n".join(buffer_texts).strip()
+        chunk_type = _resolve_chunk_type(buffer_types)
+        token_count = token_len(chunk_text) if chunk_text else 0
         chunks.append({
             "heading": current_heading,
-            "chunk": chunk_text
+            "chunk": chunk_text,
+            "chunk_type": chunk_type,
+            "heading_level": current_heading_level,
+            "token_count": token_count,
+            "contains_table": "table" in buffer_types,
+            "contains_code": "code" in buffer_types,
+            "block_index_start": block_index_start,
+            "block_index_end": block_index_end,
+            "metadata": {
+                "chunk_type": chunk_type,
+                "heading": current_heading,
+                "heading_level": current_heading_level,
+                "token_count": token_count,
+                "overlap_tokens": overlap_tokens,
+                "contains_table": "table" in buffer_types,
+                "contains_code": "code" in buffer_types,
+                "block_index_start": block_index_start,
+                "block_index_end": block_index_end,
+                "parser": "markdown_structure_v2",
+            },
         })
         if overlap_tokens > 0:
             # simple overlap by keeping last ~overlap_tokens words
@@ -185,16 +251,25 @@ def _chunk_blocks(
             tail = " ".join(words[-overlap_tokens:]) if words else ""
             buffer_texts = [tail] if tail else []
             buffer_tokens = token_len(tail) if tail else 0
+            buffer_types = [chunk_type] if tail else []
+            block_index_start = block_index_end
         else:
             buffer_texts = []
             buffer_tokens = 0
+            buffer_types = []
+            block_index_start = None
+            block_index_end = None
 
     for blk in blocks:
         if blk["type"] == "heading":
             flush()
             current_heading = blk["text"]
+            current_heading_level = blk.get("heading_level")
             buffer_texts = [blk["text"]]
             buffer_tokens = token_len(blk["text"])
+            buffer_types = ["heading"]
+            block_index_start = blk.get("block_index")
+            block_index_end = blk.get("block_index")
             continue
 
         blk_text = blk["text"]
@@ -202,8 +277,12 @@ def _chunk_blocks(
             blk_tokens = token_len(blk_text)
             if buffer_tokens + blk_tokens > max_tokens and buffer_texts:
                 flush()
+            if block_index_start is None:
+                block_index_start = blk.get("block_index")
             buffer_texts.append(blk_text)
             buffer_tokens += blk_tokens
+            buffer_types.append(blk["type"])
+            block_index_end = blk.get("block_index_end", blk.get("block_index"))
             continue
 
         # paragraph/list blocks
@@ -212,8 +291,12 @@ def _chunk_blocks(
             part_tokens = token_len(part)
             if buffer_tokens + part_tokens > max_tokens and buffer_texts:
                 flush()
+            if block_index_start is None:
+                block_index_start = blk.get("block_index")
             buffer_texts.append(part)
             buffer_tokens += part_tokens
+            buffer_types.append(blk["type"])
+            block_index_end = blk.get("block_index_end", blk.get("block_index"))
 
     flush()
     return chunks

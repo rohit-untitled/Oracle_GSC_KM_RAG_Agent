@@ -105,7 +105,7 @@ def _run_logged_step(
         raise
 
 
-def _chunk_text(text: str, max_tokens: int, overlap_tokens: int) -> List[Dict[str, str]]:
+def _chunk_text(text: str, max_tokens: int, overlap_tokens: int) -> List[Dict[str, Any]]:
     blocks = _parse_markdown_blocks(text)
     blocks = _merge_consecutive_tables(blocks)
     return _chunk_blocks(blocks, max_tokens=max_tokens, overlap_tokens=overlap_tokens)
@@ -266,12 +266,23 @@ def _process_document(
             prepared_chunks: List[Dict[str, Any]] = []
             for idx, chunk in enumerate(chunk_rows):
                 chunk_text = chunk.get("chunk", "")
+                metadata = dict(chunk.get("metadata") or {})
+                metadata.update(
+                    {
+                        "source_file": file_name,
+                        "document_type": "markdown",
+                        "chunk_index": idx,
+                        "heading": chunk.get("heading"),
+                    }
+                )
                 prepared_chunks.append(
                     {
                         "chunk_id": make_deterministic_chunk_id(document_id, idx, chunk_text),
                         "chunk_index": idx,
                         "heading": chunk.get("heading"),
                         "source_file": file_name,
+                        "document_type": metadata.get("document_type", "markdown"),
+                        "metadata": metadata,
                         "chunk": chunk_text,
                     }
                 )

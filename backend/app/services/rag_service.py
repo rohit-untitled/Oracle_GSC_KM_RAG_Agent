@@ -9,12 +9,13 @@ HISTORY_TURNS = int(get_env("HISTORY_TURNS", "15"))
 DEFAULT_CHAT_MODEL = "cohere"
 SUPPORTED_CHAT_MODELS = {"cohere", "maverick", "gpt-5.2"}
 DEFAULT_TOP_K = int(get_env("DEFAULT_TOP_K", "8"))
+SUPPORTED_CONFIDENTIALITY = {"SCM", "ERP", "EPM"}
 
 
 RETRIEVAL_PROFILES = {
     "instant": {
-        "top_k": 5,
-        "rerank_top_n": 8,
+        "top_k": 3,
+        "rerank_top_n": 4,
         "neighbor_radius": 0,
         "use_hybrid": False,
     },
@@ -78,6 +79,7 @@ def answer_query(
     model: str = DEFAULT_CHAT_MODEL,
     generate_title: bool = False,
     mode: str = "thinking",
+    confidentiality: str = "SCM",
 ) -> Dict[str, Any]:
     model_key = (model or DEFAULT_CHAT_MODEL).strip().lower()
     if model_key not in SUPPORTED_CHAT_MODELS:
@@ -87,6 +89,10 @@ def answer_query(
     if HISTORY_TURNS > 0:
         # Keep only the latest N turns to reduce context size.
         incoming_history = incoming_history[-HISTORY_TURNS:]
+
+    confidentiality_key = (confidentiality or "SCM").strip().upper()
+    if confidentiality_key not in SUPPORTED_CONFIDENTIALITY:
+        confidentiality_key = "SCM"
 
     embedder = OCIEmbeddingService()
     query_embedding = embedder.embed_text(query)
@@ -102,7 +108,19 @@ def answer_query(
         rerank_top_n=retrieval_profile["rerank_top_n"],
         neighbor_radius=retrieval_profile["neighbor_radius"],
         use_hybrid=retrieval_profile["use_hybrid"],
+        confidentiality=confidentiality_key,
     )
+
+    if not hits and retrieval_profile["mode"] == "instant":
+        hits = search_similar_chunks(
+            query_embedding,
+            top_k=6,
+            query_text=query,
+            rerank_top_n=10,
+            neighbor_radius=1,
+            use_hybrid=True,
+            confidentiality=confidentiality_key,
+        )
 
     documents = []
     for i, h in enumerate(hits):
@@ -159,18 +177,21 @@ def answer_query(
             message=query,
             chat_history=cohere_history,
             documents=documents,
+            confidentiality=confidentiality_key,
         )
     elif model_key == "gpt-5.2":
         llm_output = call_oci_chat_generic(
             message=query,
             chat_history=cohere_history,
             documents=documents,
+            confidentiality=confidentiality_key,
         )
     else:
         llm_output = call_oci_chat(
             message=query,
             chat_history=cohere_history,
             documents=documents,
+            confidentiality=confidentiality_key,
         )
     generated_title = None
     if generate_title and query:
@@ -186,6 +207,7 @@ def answer_query(
         "citations": build_citations_from_hits(hits),
         "history_length": len(incoming_history),
         "model_used": model_key,
+        "confidentiality": confidentiality_key,
         "generated_title": generated_title,
         "retrieval_config": {
             "mode": retrieval_profile["mode"],
@@ -193,5 +215,6 @@ def answer_query(
             "rerank_top_n": retrieval_profile["rerank_top_n"],
             "neighbor_radius": retrieval_profile["neighbor_radius"],
             "use_hybrid": retrieval_profile["use_hybrid"],
+            "confidentiality": confidentiality_key,
         },
     }

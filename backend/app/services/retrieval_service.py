@@ -138,6 +138,7 @@ def _fetch_keyword_hits(
     document_type: Optional[str],
     project_id: Optional[str],
     module_code: Optional[str],
+    confidentiality: Optional[str],
     file_name: Optional[str],
 ) -> List[Dict[str, Any]]:
     if not keywords or top_k <= 0:
@@ -163,6 +164,9 @@ def _fetch_keyword_hits(
         if project_id:
             filters.append("d.PROJECT_ID = :project_id")
             binds["project_id"] = project_id
+        if confidentiality:
+            filters.append("p.CONFIDENTIALITY = :confidentiality")
+            binds["confidentiality"] = confidentiality
         if module_code:
             filters.append("d.MODULE_CODE = :module_code")
             binds["module_code"] = module_code
@@ -193,6 +197,8 @@ def _fetch_keyword_hits(
               ON v.CHUNK_ID = c.CHUNK_ID
             LEFT JOIN XXGSC_KM_DOCUMENTS d
               ON d.DOCUMENT_ID = c.DOCUMENT_ID
+            LEFT JOIN XXGSC_KM_PROJECTS p
+              ON p.PROJECT_ID = d.PROJECT_ID
             LEFT JOIN XXGSC_KM_CHUNK_METADATA m
               ON m.CHUNK_ID = c.CHUNK_ID
             WHERE {' AND '.join(filters)}
@@ -215,6 +221,7 @@ def search_similar_chunks(
     document_type: Optional[str] = None,
     project_id: Optional[str] = None,
     module_code: Optional[str] = None,
+    confidentiality: Optional[str] = None,
     file_name: Optional[str] = None,
     rerank_top_n: int = 20,
     neighbor_radius: int = 2,
@@ -237,6 +244,9 @@ def search_similar_chunks(
     if project_id:
         filters.append("d.PROJECT_ID = :project_id")
         binds["project_id"] = project_id
+    if confidentiality:
+        filters.append("p.CONFIDENTIALITY = :confidentiality")
+        binds["confidentiality"] = confidentiality
     if module_code:
         filters.append("d.MODULE_CODE = :module_code")
         binds["module_code"] = module_code
@@ -267,6 +277,8 @@ def search_similar_chunks(
           ON c.CHUNK_ID = v.CHUNK_ID
         LEFT JOIN XXGSC_KM_DOCUMENTS d
           ON d.DOCUMENT_ID = c.DOCUMENT_ID
+        LEFT JOIN XXGSC_KM_PROJECTS p
+          ON p.PROJECT_ID = d.PROJECT_ID
         LEFT JOIN XXGSC_KM_CHUNK_METADATA m
           ON m.CHUNK_ID = c.CHUNK_ID
         WHERE {' AND '.join(filters)}
@@ -289,6 +301,7 @@ def search_similar_chunks(
             document_type=document_type,
             project_id=project_id,
             module_code=module_code,
+            confidentiality=confidentiality,
             file_name=file_name,
         )
 

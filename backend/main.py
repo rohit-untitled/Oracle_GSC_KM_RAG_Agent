@@ -38,4 +38,4 @@ app.include_router(ingestion_router)
 
 @app.get("/")
 def root():
-    return {"message": "AI Redaction Agent is running!"}
+    return {"message": "KM AI Agent is running!"}

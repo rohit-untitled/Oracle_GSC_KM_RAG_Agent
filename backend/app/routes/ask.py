@@ -29,6 +29,7 @@ class RAGRequest(BaseModel):
     generate_title: bool = False
     model: Literal["cohere", "maverick", "gpt-5.2"] = "cohere"
     mode: Literal["instant", "thinking", "pro"] = "thinking"
+    confidentiality: Literal["SCM", "ERP", "EPM"] = "SCM"
 
 
 class ChatModelOption(BaseModel):
@@ -90,6 +91,7 @@ def _process_ask(
         model=payload.model,
         generate_title=payload.generate_title,
         mode=payload.mode,
+        confidentiality=payload.confidentiality,
     )
     elapsed_seconds = time.perf_counter() - started_at
     return {
@@ -101,6 +103,7 @@ def _process_ask(
         "model": response["model_used"],
         "generated_title": response.get("generated_title"),
         "mode": response.get("retrieval_config", {}).get("mode", payload.mode),
+        "confidentiality": response.get("confidentiality", payload.confidentiality),
         "time_taken": round(elapsed_seconds, 3),
         "token_usage": {
             "input_tokens_estimated": history_tokens + query_tokens,
@@ -127,7 +130,7 @@ def ask_endpoint(payload: RAGRequest):
     query = (payload.query or "").strip()
     if not query:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
-    logger.info("Received ask request")
+    logger.info("Received ask request | confidentiality=%s", payload.confidentiality)
 
     try:
         history_payload = _normalize_history(payload.history)
