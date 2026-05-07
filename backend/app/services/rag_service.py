@@ -168,7 +168,7 @@ def answer_query(
     if not documents:
         documents = [{
             "title": "No matching knowledge found",
-            "snippet": "No relevant knowledge base chunks were found for this query. Respond carefully and mention that no strong source context was retrieved.",
+            "snippet": "I couldn’t find a matching project document for this question. I’ll answer using general Oracle Fusion guidance, and I’ll call out what would need confirmation from the relevant setup workbook, mapping file, design document, or implementation document.",
         }]
 
     # ---- Call selected chat model ----
