@@ -10,6 +10,24 @@ from app.services.secure_config import get_env, require_env
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_IMAGE_MIME_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
+    "image/webp",
+}
+
+UNSUPPORTED_IMAGE_EXTENSIONS = {
+    ".emf",
+    ".wmf",
+    ".svg",
+    ".ico",
+}
+
+MAX_IMAGE_BYTES = int(get_env("IMAGE_SUMMARY_MAX_BYTES", str(10 * 1024 * 1024)))
+
 _OCI_CLIENT = None
 _OCI_REGION = require_env("OCI_REGION")
 _OCI_PROFILE = require_env("CONFIG_PROFILE")
@@ -31,7 +49,7 @@ def _get_oci_client() -> OciOpenAI:
 
 def _detect_mime_type(image_path: str) -> str:
     mime_type, _ = mimetypes.guess_type(image_path)
-    if mime_type:
+    if mime_type in SUPPORTED_IMAGE_MIME_TYPES:
         return mime_type
 
     try:
@@ -46,9 +64,41 @@ def _detect_mime_type(image_path: str) -> str:
             "tiff": "image/tiff",
             "webp": "image/webp",
         }
-        return mime_map.get(fmt, "image/png")
+        return mime_map.get(fmt, "")
     except Exception:
-        return "image/png"
+        return ""
+
+
+def _should_skip_image(image_path: str, mime_type: str) -> bool:
+    ext = os.path.splitext(image_path)[1].lower()
+    if ext in UNSUPPORTED_IMAGE_EXTENSIONS:
+        logger.info("Skipping unsupported image extension for LLM summary: %s", image_path)
+        return True
+
+    if not mime_type:
+        logger.info("Skipping image with unknown/unsupported MIME type for LLM summary: %s", image_path)
+        return True
+
+    if mime_type not in SUPPORTED_IMAGE_MIME_TYPES:
+        logger.info("Skipping unsupported MIME type %s for LLM summary: %s", mime_type, image_path)
+        return True
+
+    try:
+        file_size = os.path.getsize(image_path)
+    except OSError as e:
+        logger.warning("Failed to inspect image size %s: %s", image_path, e)
+        return True
+
+    if file_size > MAX_IMAGE_BYTES:
+        logger.info(
+            "Skipping oversized image for LLM summary (%s bytes > %s): %s",
+            file_size,
+            MAX_IMAGE_BYTES,
+            image_path,
+        )
+        return True
+
+    return False
 
 
 def summarize_image_with_llm(image_path: str) -> str:
@@ -56,6 +106,8 @@ def summarize_image_with_llm(image_path: str) -> str:
         return ""
 
     mime_type = _detect_mime_type(image_path)
+    if _should_skip_image(image_path, mime_type):
+        return ""
 
     try:
         with open(image_path, "rb") as f:

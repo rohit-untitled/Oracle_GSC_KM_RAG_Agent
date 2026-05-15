@@ -51,6 +51,34 @@ def _normalize_history(history: List[ChatTurn]) -> List[Dict[str, str]]:
     return [{"role": turn.role, "content": turn.content} for turn in history]
 
 
+def _normalize_turn(turn: Dict[str, str]) -> Optional[Dict[str, str]]:
+    role = (turn.get("role") or "").strip().lower()
+    content = (turn.get("content") or "").strip()
+    if role not in {"user", "assistant"} or not content:
+        return None
+    return {"role": role, "content": content}
+
+
+def _sanitize_request_history(request_history: List[Dict[str, str]], query: str) -> List[Dict[str, str]]:
+    normalized_history = [
+        normalized
+        for turn in request_history
+        if (normalized := _normalize_turn(turn)) is not None
+    ]
+
+    current_query = (query or "").strip()
+    if normalized_history and normalized_history[-1]["role"] == "user":
+        if normalized_history[-1]["content"].strip() == current_query:
+            normalized_history = normalized_history[:-1]
+
+    deduped: List[Dict[str, str]] = []
+    for turn in normalized_history:
+        if deduped and deduped[-1] == turn:
+            continue
+        deduped.append(turn)
+    return deduped
+
+
 def _apply_history_limits(
     history: List[Dict[str, str]],
     query: str,
@@ -134,6 +162,7 @@ def ask_endpoint(payload: RAGRequest):
 
     try:
         history_payload = _normalize_history(payload.history)
+        history_payload = _sanitize_request_history(history_payload, query)
         history_payload, history_tokens, query_tokens = _apply_history_limits(
             history=history_payload,
             query=query,
