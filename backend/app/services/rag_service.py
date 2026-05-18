@@ -83,6 +83,17 @@ STOPWORDS = {
     "that", "the", "this", "to", "us", "what", "which", "with", "you", "your",
 }
 
+QUERY_FILLER_PATTERNS = [
+    r"\bhow\s+to\b",
+    r"\bcan\s+you\b",
+    r"\bplease\b",
+    r"\bshow\s+me\b",
+    r"\bexplain\b",
+    r"\bwhat\s+is\b",
+    r"\bwhat\s+are\b",
+    r"\btell\s+me\b",
+]
+
 SOURCE_QUESTION_PATTERNS = [
     r"\bwhat\s+is\s+the\s+source\b",
     r"\bwhat\s+is\s+the\s+source\s+of\s+this\b",
@@ -137,6 +148,21 @@ def _truncate_text(value: str, max_chars: int) -> str:
     return normalized[: max_chars - 3].rstrip() + "..."
 
 
+def _dedupe_preserve_order(values: List[str]) -> List[str]:
+    seen = set()
+    output: List[str] = []
+    for value in values:
+        normalized = _normalize_spaces(value)
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(normalized)
+    return output
+
+
 def _clean_history_turns(history: List[Dict[str, str]]) -> List[Dict[str, str]]:
     cleaned: List[Dict[str, str]] = []
     for turn in history:
@@ -157,6 +183,54 @@ def _tokenize_keywords(text: str) -> List[str]:
             continue
         tokens.append(token)
     return tokens
+
+
+def _extract_uppercase_tokens(text: str) -> List[str]:
+    return _dedupe_preserve_order(re.findall(r"\b[A-Z][A-Z0-9]{1,}\b", text or ""))
+
+
+def _strip_query_fillers(query: str) -> str:
+    cleaned = _normalize_spaces(query)
+    for pattern in QUERY_FILLER_PATTERNS:
+        cleaned = re.sub(pattern, " ", cleaned, flags=re.IGNORECASE)
+        cleaned = _normalize_spaces(cleaned)
+    return cleaned
+
+
+def _build_keyword_focus_query(query: str) -> Optional[str]:
+    keywords = _tokenize_keywords(query)
+    uppercase_tokens = _extract_uppercase_tokens(query)
+    merged = _dedupe_preserve_order(uppercase_tokens + keywords[:8])
+    if not merged:
+        return None
+    return _truncate_text(" ".join(merged), MAX_RETRIEVAL_QUERY_CHARS)
+
+
+def _build_runtime_query_variants(query: str) -> List[str]:
+    normalized = _truncate_text(query, MAX_RETRIEVAL_QUERY_CHARS)
+    variants: List[str] = [normalized]
+
+    normalized_no_punct = _normalize_spaces(re.sub(r"[^A-Za-z0-9_\-/\s]", " ", normalized))
+    if normalized_no_punct and normalized_no_punct.lower() != normalized.lower():
+        variants.append(_truncate_text(normalized_no_punct, MAX_RETRIEVAL_QUERY_CHARS))
+
+    stripped = _strip_query_fillers(normalized)
+    if stripped and stripped.lower() != normalized.lower():
+        variants.append(_truncate_text(stripped, MAX_RETRIEVAL_QUERY_CHARS))
+
+    stripped_no_punct = _normalize_spaces(re.sub(r"[^A-Za-z0-9_\-/\s]", " ", stripped))
+    if stripped_no_punct and stripped_no_punct.lower() not in {v.lower() for v in variants}:
+        variants.append(_truncate_text(stripped_no_punct, MAX_RETRIEVAL_QUERY_CHARS))
+
+    keyword_focus = _build_keyword_focus_query(normalized)
+    if keyword_focus:
+        variants.append(keyword_focus)
+
+    uppercase_tokens = _extract_uppercase_tokens(normalized)
+    if uppercase_tokens:
+        variants.append(_truncate_text(" ".join(uppercase_tokens), MAX_RETRIEVAL_QUERY_CHARS))
+
+    return _dedupe_preserve_order(variants)
 
 
 def _has_domain_hints(query: str) -> bool:
@@ -287,7 +361,7 @@ def _build_retrieval_candidates(query: str, history: List[Dict[str, str]]) -> Di
     classification = context["classification"]
     recent_user_turns = context["recent_user_turns"]
 
-    candidates: List[str] = [normalized_query]
+    candidates: List[str] = _build_runtime_query_variants(normalized_query)
 
     if classification == "source_question" and recent_user_turns:
         for topic in reversed(recent_user_turns[-2:]):
@@ -295,17 +369,19 @@ def _build_retrieval_candidates(query: str, history: List[Dict[str, str]]) -> Di
             if topical and topical not in candidates:
                 candidates.insert(0, topical)
     elif classification == "standalone":
-        candidates = [normalized_query]
+        candidates = _build_runtime_query_variants(normalized_query)
     elif classification == "topic_shift":
-        candidates = [normalized_query]
+        candidates = _build_runtime_query_variants(normalized_query)
     elif classification == "followup":
         rewritten = _rewrite_followup_query(normalized_query, recent_user_turns)
         if rewritten and rewritten not in candidates:
             candidates.insert(0, rewritten)
+        candidates.extend(_build_runtime_query_variants(rewritten or normalized_query))
     elif classification == "ambiguous" and recent_user_turns:
         conservative = _rewrite_followup_query(normalized_query, [recent_user_turns[-1]])
         if conservative and conservative not in candidates:
             candidates.append(conservative)
+        candidates.extend(_build_runtime_query_variants(conservative or normalized_query))
 
     if classification in {"followup", "ambiguous", "source_question"}:
         for topic in reversed(recent_user_turns[-1:]):
@@ -313,9 +389,11 @@ def _build_retrieval_candidates(query: str, history: List[Dict[str, str]]) -> Di
             if topical and topical not in candidates:
                 candidates.append(topical)
 
+    candidates = _dedupe_preserve_order(candidates)
+
     return {
         "original_query": normalized_query,
-        "candidates": candidates[:3],
+        "candidates": candidates[:6],
         "classification": classification,
         "confidence": context["confidence"],
         "reason": context["reason"],
@@ -435,7 +513,26 @@ def _score_hit_relevance(hit: Dict[str, Any], query: str) -> int:
     source_file = _normalize_spaces(metadata.get("source_file", ""))
     heading = _normalize_spaces(metadata.get("heading", ""))
     combined = " ".join([chunk_text, source_file, heading]).lower()
-    return sum(1 for token in query_tokens if token in combined)
+    score = sum(1 for token in query_tokens if token in combined)
+
+    exact_phrase = _normalize_spaces(query).lower()
+    if exact_phrase and exact_phrase in combined:
+        score += 3
+
+    for acronym in _extract_uppercase_tokens(query):
+        if acronym.lower() in combined:
+            score += 2
+
+    if any(acronym.lower() in combined for acronym in _extract_uppercase_tokens(query)):
+        score += 2
+
+    if heading and any(token in heading.lower() for token in query_tokens):
+        score += 1
+
+    if source_file and any(token in source_file.lower() for token in query_tokens):
+        score += 1
+
+    return score
 
 
 def _retrieval_has_sufficient_signal(hits: List[Dict[str, Any]], query: str) -> bool:
@@ -474,38 +571,71 @@ def _retrieve_with_history_awareness(
 
     winning_query: Optional[str] = None
     winning_hits: List[Dict[str, Any]] = []
+    best_score = -1
     for candidate in plan["candidates"]:
         attempted_queries.append(candidate)
         hits = _run_retrieval(embedder, candidate, retrieval_profile, confidentiality_key)
         hit_groups.append(hits)
-        if hits and _retrieval_has_sufficient_signal(hits, candidate):
-            winning_query = candidate
-            winning_hits = hits
-            break
+        if hits:
+            candidate_score = max(_score_hit_relevance(hit, candidate) for hit in hits)
+            if candidate_score > best_score:
+                best_score = candidate_score
+                winning_query = candidate
+                winning_hits = hits
 
     merged_hits = _merge_hits(hit_groups, retrieval_profile["top_k"])
-    if winning_hits:
+    if winning_hits and _retrieval_has_sufficient_signal(winning_hits, winning_query or plan["original_query"]):
         merged_hits = _merge_hits([winning_hits], retrieval_profile["top_k"])
 
     if not merged_hits and retrieval_profile["mode"] == "instant":
         fallback_profile = dict(retrieval_profile)
         fallback_profile.update({
-            "top_k": 6,
-            "rerank_top_n": 10,
-            "neighbor_radius": 1,
+            "top_k": 10,
+            "rerank_top_n": 16,
+            "neighbor_radius": 2,
             "use_hybrid": True,
         })
         fallback_groups: List[List[Dict[str, Any]]] = []
-        for candidate in attempted_queries[:2]:
+        fallback_candidates = _dedupe_preserve_order(plan["candidates"] + _build_runtime_query_variants(plan["original_query"]))
+        best_fallback_score = best_score
+        for candidate in fallback_candidates[:6]:
             fallback_hits = _run_retrieval(embedder, candidate, fallback_profile, confidentiality_key)
             fallback_groups.append(fallback_hits)
-            if fallback_hits and _retrieval_has_sufficient_signal(fallback_hits, candidate):
-                winning_query = candidate
-                winning_hits = fallback_hits
-                break
+            if fallback_hits:
+                candidate_score = max(_score_hit_relevance(hit, candidate) for hit in fallback_hits)
+                if candidate_score > best_fallback_score:
+                    best_fallback_score = candidate_score
+                    winning_query = candidate
+                    winning_hits = fallback_hits
         merged_hits = _merge_hits(fallback_groups, fallback_profile["top_k"])
-        if winning_hits:
+        if winning_hits and _retrieval_has_sufficient_signal(winning_hits, winning_query or plan["original_query"]):
             merged_hits = _merge_hits([winning_hits], fallback_profile["top_k"])
+
+    if not merged_hits and retrieval_profile["mode"] == "thinking":
+        thinking_fallback_profile = dict(retrieval_profile)
+        thinking_fallback_profile.update({
+            "top_k": max(retrieval_profile["top_k"], 12),
+            "rerank_top_n": max(retrieval_profile["rerank_top_n"], 18),
+            "neighbor_radius": max(retrieval_profile["neighbor_radius"], 2),
+            "use_hybrid": True,
+        })
+        thinking_fallback_groups: List[List[Dict[str, Any]]] = []
+        expanded_candidates = _dedupe_preserve_order(
+            plan["candidates"] + _build_runtime_query_variants(plan["original_query"])
+        )
+        best_thinking_score = best_score
+        for candidate in expanded_candidates[:8]:
+            thinking_hits = _run_retrieval(embedder, candidate, thinking_fallback_profile, confidentiality_key)
+            thinking_fallback_groups.append(thinking_hits)
+            if thinking_hits:
+                candidate_score = max(_score_hit_relevance(hit, candidate) for hit in thinking_hits)
+                if candidate_score > best_thinking_score:
+                    best_thinking_score = candidate_score
+                    winning_query = candidate
+                    winning_hits = thinking_hits
+        merged_hits = _merge_hits(thinking_fallback_groups, thinking_fallback_profile["top_k"])
+        if winning_hits and _retrieval_has_sufficient_signal(winning_hits, winning_query or plan["original_query"]):
+            merged_hits = _merge_hits([winning_hits], thinking_fallback_profile["top_k"])
 
     retrieval_debug = {
         "original_query": plan["original_query"],

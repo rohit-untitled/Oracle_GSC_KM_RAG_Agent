@@ -185,6 +185,14 @@ Citation placement:
 - Never create fake citations.
 - Never cite a source that was not provided in retrieved context.
 
+MULTI-SOURCE SUPPORT RULE
+
+- If the same answer or conclusion is supported by more than one retrieved source or section, mention the primary source and also explicitly mention the additional supporting source(s).
+- When useful, use phrasing such as: "This is also supported in..." or "The same point is also referenced in..."
+- If multiple retrieved sources confirm the same process, flow, setup, or conclusion, do not hide the additional evidence.
+- Prefer concise multi-source confirmation rather than repeating the full same explanation from every source.
+- If the sources differ slightly, mention the overlap first and then briefly note the difference.
+
 If no retrieved source is available, do not cite anything.
 
 
