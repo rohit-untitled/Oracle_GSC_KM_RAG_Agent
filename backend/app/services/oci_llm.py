@@ -34,6 +34,10 @@ OCI_GENERIC_MAX_PROMPT_CHARS = int(get_env("OCI_GENERIC_MAX_PROMPT_CHARS", "1200
 CHAT_TEMPERATURE = float(get_env("CHAT_TEMPERATURE", "0.3"))
 CHAT_TOP_P = float(get_env("CHAT_TOP_P", "0.75"))
 CHAT_TOP_K = int(get_env("CHAT_TOP_K", "40"))
+OCI_CONNECT_TIMEOUT = float(get_env("OCI_CONNECT_TIMEOUT", "10"))
+OCI_READ_TIMEOUT = float(get_env("OCI_READ_TIMEOUT", "240"))
+COHERE_MAX_DOCUMENTS = int(get_env("COHERE_MAX_DOCUMENTS", "6"))
+COHERE_MAX_DOCUMENT_CHARS = int(get_env("COHERE_MAX_DOCUMENT_CHARS", "1800"))
 
 config_path = get_env("OCI_CONFIG_PATH", os.path.expanduser("~/.oci/config"))
 logger.info(f"Loading OCI config from: {config_path}")
@@ -46,10 +50,65 @@ except Exception as e:
 
 ENDPOINT = require_env("ENDPOINT")
 
+
+class LLMTimeoutError(RuntimeError):
+    """Raised when the OCI LLM request exceeds its timeout budget."""
+
+
+def _oci_client_timeout() -> tuple[float, float]:
+    return (OCI_CONNECT_TIMEOUT, OCI_READ_TIMEOUT)
+
+
+def _is_timeout_error(err: Exception) -> bool:
+    text = str(err).lower()
+    return any(
+        marker in text
+        for marker in (
+            "timed out",
+            "timeout",
+            "read timed out",
+            "connect timeout",
+        )
+    )
+
+
+def _normalize_cohere_documents(documents: list | None) -> list:
+    if not documents:
+        return []
+
+    normalized = []
+    for doc in documents[: max(1, COHERE_MAX_DOCUMENTS)]:
+        title = (doc or {}).get("title", "Document")
+        snippet = _trim_text((doc or {}).get("snippet", ""), COHERE_MAX_DOCUMENT_CHARS)
+        normalized.append({
+            "title": title,
+            "snippet": snippet,
+        })
+    return normalized
+
+
+def _mask_model_id(model_id: str | None) -> str:
+    value = (model_id or "").strip()
+    if not value:
+        return "-"
+    if len(value) <= 20:
+        return value
+    return f"{value[:12]}...{value[-8:]}"
+
+
+def _cohere_endpoint() -> str:
+    return ENDPOINT
+
+
+def _generic_endpoint() -> str:
+    return OCI_GENERIC_ENDPOINT or ENDPOINT
+
 try:
     oci_client = GenerativeAiInferenceClient(
         config=config,
         service_endpoint=ENDPOINT,
+        retry_strategy=oci.retry.NoneRetryStrategy(),
+        timeout=_oci_client_timeout(),
     )
     logger.info("OCI Generative AI Client initialized successfully.")
 except Exception as e:
@@ -78,6 +137,8 @@ def _get_generic_oci_client() -> GenerativeAiInferenceClient:
         _OCI_GENERIC_CLIENT = GenerativeAiInferenceClient(
             config=config,
             service_endpoint=generic_endpoint,
+            retry_strategy=oci.retry.NoneRetryStrategy(),
+            timeout=_oci_client_timeout(),
         )
     return _OCI_GENERIC_CLIENT
 
@@ -192,10 +253,21 @@ def call_oci_chat(
         if chat_history:
             effective_chat_history.extend(chat_history)
 
+        normalized_documents = _normalize_cohere_documents(documents)
+        logger.info(
+            "Calling OCI Cohere chat | endpoint=%s model_id=%s docs=%s history_turns=%s message_chars=%s confidentiality=%s",
+            _cohere_endpoint(),
+            _mask_model_id(MODEL_ID),
+            len(normalized_documents),
+            len(chat_history or []),
+            len((message or "").strip()),
+            (confidentiality or "SCM").strip().upper(),
+        )
+
         chat_request = CohereChatRequest(
             message=message,
             api_format=CohereChatRequest.API_FORMAT_COHERE,
-            documents=documents or [],
+            documents=normalized_documents,
             chat_history=effective_chat_history,
             max_tokens=CHAT_MAX_TOKENS,
             temperature=CHAT_TEMPERATURE,
@@ -219,6 +291,8 @@ def call_oci_chat(
 
     except Exception as e:
         logger.error("OCI Chat failed", exc_info=True)
+        if _is_timeout_error(e):
+            raise LLMTimeoutError("LLM request timed out") from e
         raise RuntimeError("LLM generation failed") from e
 
 
@@ -258,6 +332,15 @@ def call_oci_chat_maverick(
                     messages.append({"role": "assistant", "content": msg})
 
         messages.append({"role": "user", "content": message})
+        logger.info(
+            "Calling OCI Maverick chat | region=%s model=%s docs=%s history_turns=%s message_chars=%s confidentiality=%s",
+            OCI_REGION,
+            OCI_OPENAI_MODEL,
+            len(documents or []),
+            len(chat_history or []),
+            len((message or "").strip()),
+            (confidentiality or "SCM").strip().upper(),
+        )
 
         client = _get_oci_openai_client()
         completion = client.chat.completions.create(
@@ -269,6 +352,8 @@ def call_oci_chat_maverick(
         return _extract_openai_content(completion)
     except Exception as e:
         logger.error("OCI Maverick chat failed", exc_info=True)
+        if _is_timeout_error(e):
+            raise LLMTimeoutError("LLM request timed out") from e
         raise RuntimeError("LLM generation failed") from e
 
 
@@ -316,6 +401,15 @@ def call_oci_chat_generic(
             "\n\n".join(part for part in prompt_parts if part),
             OCI_GENERIC_MAX_PROMPT_CHARS,
         )
+        logger.info(
+            "Calling OCI Generic chat | endpoint=%s model_id=%s docs=%s history_turns=%s prompt_chars=%s confidentiality=%s",
+            _generic_endpoint(),
+            _mask_model_id(OCI_GENERIC_MODEL_ID),
+            len(documents or []),
+            len(chat_history or []),
+            len(full_prompt),
+            (confidentiality or "SCM").strip().upper(),
+        )
 
         content = TextContent()
         content.text = full_prompt
@@ -352,6 +446,8 @@ def call_oci_chat_generic(
 
     except Exception as e:
         logger.error("OCI Generic chat failed", exc_info=True)
+        if _is_timeout_error(e):
+            raise LLMTimeoutError("LLM request timed out") from e
         raise RuntimeError("LLM generation failed") from e
 
 
@@ -365,6 +461,12 @@ def call_oci_title(message: str, max_words: int = 5) -> str:
     )
 
     try:
+        logger.info(
+            "Calling OCI title generation | endpoint=%s model_id=%s message_chars=%s",
+            _cohere_endpoint(),
+            _mask_model_id(MODEL_ID),
+            len((message or "").strip()),
+        )
         chat_request = CohereChatRequest(
             message=message,
             api_format=CohereChatRequest.API_FORMAT_COHERE,
@@ -395,4 +497,6 @@ def call_oci_title(message: str, max_words: int = 5) -> str:
 
     except Exception as e:
         logger.error("OCI Title generation failed", exc_info=True)
+        if _is_timeout_error(e):
+            raise LLMTimeoutError("LLM title generation timed out") from e
         raise RuntimeError("LLM title generation failed") from e
