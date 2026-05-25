@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.services.oci_llm import LLMTimeoutError
 from app.services.rag_service import answer_query
 from app.services.secure_config import get_env
 
@@ -158,7 +159,15 @@ def ask_endpoint(payload: RAGRequest):
     query = (payload.query or "").strip()
     if not query:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
-    logger.info("Received ask request | confidentiality=%s", payload.confidentiality)
+    logger.info(
+        "Received ask request | model=%s confidentiality=%s mode=%s session_id=%s query_chars=%s history_turns=%s",
+        payload.model,
+        payload.confidentiality,
+        payload.mode,
+        payload.session_id or "-",
+        len(query),
+        len(payload.history or []),
+    )
 
     try:
         history_payload = _normalize_history(payload.history)
@@ -178,6 +187,15 @@ def ask_endpoint(payload: RAGRequest):
         )
     except HTTPException:
         raise
+    except LLMTimeoutError as e:
+        logger.warning("LLM timeout while processing ask request: %s", e)
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "message": "The knowledge assistant took too long to respond.",
+                "error": "LLM request timed out. Please retry, use a shorter question, or try a different model.",
+            },
+        )
     except Exception as e:
         logger.exception(f"Error in RAG query: {e}")
         raise HTTPException(

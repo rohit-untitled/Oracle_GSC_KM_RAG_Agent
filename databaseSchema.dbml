@@ -28,6 +28,7 @@ Enum km_step_status {
 
 Enum km_document_status {
   STAGED
+  READY
   IN_PROGRESS
   COMPLETED
   FAILED
@@ -259,7 +260,7 @@ Table XXGSC_KM_CHUNK_VECTOR {
   CHUNK_ID varchar2(100) [not null, unique, ref: - XXGSC_KM_DOCUMENT_CHUNK.CHUNK_ID]
   DOCUMENT_ID varchar2(50) [not null, ref: > XXGSC_KM_DOCUMENTS.DOCUMENT_ID]
   RUN_ID varchar2(50) [not null, ref: > XXGSC_KM_INGESTION_RUN.RUN_ID]
-  EMBEDDING_VECTOR vector(1536) [not null]
+  EMBEDDING_VECTOR text [not null, note: 'Actual Oracle type: VECTOR(1024); using DBML-friendly type for preview compatibility']
   CREATED_BY varchar2(255) [not null]
   CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
   LAST_UPDATED_BY varchar2(255) [not null]
@@ -274,5 +275,34 @@ Table XXGSC_KM_CHUNK_VECTOR {
     Stores the vector embedding generated for a document chunk.
     This table is used for semantic similarity search during RAG retrieval.
     The vector row links back to the chunk and document so that results can be enriched with source metadata and citations.
+  '''
+}
+
+Table XXGSC_KM_CHUNK_METADATA {
+  METADATA_ID varchar2(50) [pk, note: 'Default: SYS_GUID()']
+  CHUNK_ID varchar2(100) [not null, unique, ref: - XXGSC_KM_DOCUMENT_CHUNK.CHUNK_ID]
+  DOCUMENT_ID varchar2(50) [not null, ref: > XXGSC_KM_DOCUMENTS.DOCUMENT_ID]
+  RUN_ID varchar2(50) [not null, ref: > XXGSC_KM_INGESTION_RUN.RUN_ID]
+  DOCUMENT_TYPE varchar2(100)
+  SOURCE_FILE varchar2(500)
+  PAGE_NUMBER number
+  SHEET_NAME varchar2(255)
+  ROW_NUMBER number
+  METADATA_JSON clob
+  CREATED_BY varchar2(255) [not null]
+  CREATION_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  LAST_UPDATED_BY varchar2(255) [not null]
+  LAST_UPDATE_DATE timestamp(6) [not null, default: 'CURRENT_TIMESTAMP']
+  ATTRIBUTE1 varchar2(150)
+  ATTRIBUTE2 varchar2(150)
+  ATTRIBUTE3 varchar2(150)
+  ATTRIBUTE4 varchar2(150)
+  ATTRIBUTE5 varchar2(150)
+
+  Note: '''
+    Stores structured chunk-level metadata used during retrieval enrichment and traceability.
+    This table keeps document-type-specific context such as page number, sheet name, row number,
+    source file, and serialized metadata JSON for each chunk.
+    It is maintained alongside chunk/vector upserts and joined during retrieval flows.
   '''
 }

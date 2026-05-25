@@ -13,8 +13,8 @@
     {
       "name": "XXGSC_KM_INGESTION_BATCH",
       "schemaName": "public",
-      "x": -119.35600382408614,
-      "y": 1000.1291761381156
+      "x": -106.84214643645618,
+      "y": 879.9971014343462
     },
     {
       "name": "XXGSC_KM_DOCUMENTS",
@@ -51,6 +51,12 @@
       "schemaName": "public",
       "x": 1617.8044760934065,
       "y": 899.2007174573073
+    },
+    {
+      "name": "XXGSC_KM_CHUNK_METADATA",
+      "schemaName": "public",
+      "x": 2046.6626546610944,
+      "y": 637.9447683240965
     }
   ],
   "tableGroupCollapseStates": [],
