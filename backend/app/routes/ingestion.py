@@ -13,6 +13,7 @@ from app.services.anonymize_service import anonymize_markdown
 from app.services.chunk_service import _chunk_blocks, _merge_consecutive_tables, _parse_markdown_blocks
 from app.services.extractors.document_extractor_service import extract_text_with_formatting_in_sequence
 from app.services.extractors.excel_extractor import extract_excel_workbook, workbook_record_to_ingestion_records
+from app.services.extractors.pptx_extractor import extract_presentation, presentation_record_to_ingestion_records
 from app.services.document_loader import load_docx_files
 from app.services.embedding_service import OCIEmbeddingService
 from app.services.ingestion_db_service import (
@@ -137,6 +138,44 @@ def _prepare_excel_chunks(local_path: str, document_id: str, file_name: str) -> 
     return prepared_chunks
 
 
+def _prepare_pptx_chunks(local_path: str, document_id: str, file_name: str) -> List[Dict[str, Any]]:
+    presentation_record = extract_presentation(local_path)
+    ingestion_records = presentation_record_to_ingestion_records(presentation_record)
+
+    prepared_chunks: List[Dict[str, Any]] = []
+    for idx, record in enumerate(ingestion_records):
+        chunk_text = record.text
+        metadata = dict(record.metadata)
+        metadata.setdefault("source_file", file_name)
+        prepared_chunks.append(
+            {
+                "chunk_id": make_deterministic_chunk_id(document_id, idx, chunk_text),
+                "chunk_index": idx,
+                "heading": (
+                    f"Slide {metadata.get('slide_number')}: {metadata.get('slide_title')}"
+                    if metadata.get("slide_title")
+                    else f"Slide {metadata.get('slide_number')}"
+                ),
+                "source_file": file_name,
+                "document_type": "pptx",
+                "slide_number": metadata.get("slide_number"),
+                "metadata": metadata,
+                "chunk": chunk_text,
+            }
+        )
+
+    return prepared_chunks
+
+
+def _anonymize_prepared_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    anonymized_chunks: List[Dict[str, Any]] = []
+    for chunk in chunks:
+        row = dict(chunk)
+        row["chunk"] = anonymize_markdown(row.get("chunk", ""))
+        anonymized_chunks.append(row)
+    return anonymized_chunks
+
+
 def _embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not chunks:
         return []
@@ -186,9 +225,17 @@ def _process_document(
             resolved_mime_type = doc.get("mime_type") or mimetypes.guess_type(file_name)[0]
             file_ext = Path(local_path).suffix.lower()
             file_hash = _compute_file_hash(local_path)
-            excel_chunks = _prepare_excel_chunks(local_path, document_id, file_name) if file_ext in {".xlsx", ".xlsm"} else None
-            extracted_text = _extract_document_text(local_path) if excel_chunks is None else "\n\n".join(
-                chunk.get("chunk", "") for chunk in excel_chunks
+            excel_chunks = (
+                _prepare_excel_chunks(local_path, document_id, file_name)
+                if file_ext in {".xlsx", ".xlsm", ".xls"}
+                else None
+            )
+            pptx_chunks = _prepare_pptx_chunks(local_path, document_id, file_name) if file_ext == ".pptx" else None
+            structured_chunks = excel_chunks if excel_chunks is not None else pptx_chunks
+            extracted_text = (
+                _extract_document_text(local_path)
+                if structured_chunks is None
+                else "\n\n".join(chunk.get("chunk", "") for chunk in structured_chunks)
             )
             content_hash = compute_sha256_text(extracted_text)
 
@@ -201,6 +248,7 @@ def _process_document(
                         "mime_type": resolved_mime_type,
                         "extracted_text": extracted_text,
                         "excel_chunks": excel_chunks,
+                        "pptx_chunks": pptx_chunks,
                     }
 
                 supersede_document(existing["document_id"], requested_by)
@@ -216,6 +264,7 @@ def _process_document(
                 "mime_type": resolved_mime_type,
                 "extracted_text": extracted_text,
                 "excel_chunks": excel_chunks,
+                "pptx_chunks": pptx_chunks,
             }
 
         prepare_result = _run_logged_step(
@@ -239,10 +288,26 @@ def _process_document(
 
         extracted_text = prepare_result["extracted_text"]
         excel_chunks = prepare_result.get("excel_chunks")
+        pptx_chunks = prepare_result.get("pptx_chunks")
 
         if excel_chunks is not None:
             processed_text = extracted_text
             prepared_chunks = excel_chunks
+        elif pptx_chunks is not None:
+            prepared_chunks = (
+                _run_logged_step(
+                    run_id=run_id,
+                    batch_id=batch_id,
+                    document_id=document_id,
+                    step_name="ANONYMIZE",
+                    step_sequence=2,
+                    created_by=requested_by,
+                    action=lambda: _anonymize_prepared_chunks(pptx_chunks),
+                )
+                if anonymize_docs
+                else pptx_chunks
+            )
+            processed_text = "\n\n".join(chunk.get("chunk", "") for chunk in prepared_chunks)
         else:
             processed_text = _run_logged_step(
                 run_id=run_id,

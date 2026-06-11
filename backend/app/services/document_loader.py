@@ -16,7 +16,7 @@ def load_docx_files(folder_path: str) -> List[dict]:
     """
     documents = []
     root_path = os.path.abspath(folder_path)
-    supported_ext = {".docx", ".pptx", ".txt", ".pdf"}
+    supported_ext = {".docx", ".pptx", ".txt", ".pdf", ".xlsx", ".xlsm", ".xls"}
 
     for root, _, files in os.walk(folder_path):
         for file in files:

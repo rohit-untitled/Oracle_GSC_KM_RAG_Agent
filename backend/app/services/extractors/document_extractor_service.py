@@ -18,7 +18,7 @@ def extract_text_with_formatting_in_sequence(file_path: str) -> str:
         return extract_txt_in_sequence(file_path)
     if ext == ".pdf":
         return extract_pdf_with_formatting_in_sequence(file_path)
-    if ext in {".xlsx", ".xlsm"}:
+    if ext in {".xlsx", ".xlsm", ".xls"}:
         return workbook_record_to_text(extract_excel_workbook(file_path))
 
-    raise ValueError(f"Unsupported file type: {ext}. Supported: .docx, .pptx, .txt, .pdf, .xlsx, .xlsm")
+    raise ValueError(f"Unsupported file type: {ext}. Supported: .docx, .pptx, .txt, .pdf, .xlsx, .xlsm, .xls")
