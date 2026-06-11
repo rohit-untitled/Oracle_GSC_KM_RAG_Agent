@@ -6,7 +6,7 @@ import os
 from oci_openai import OciOpenAI, OciUserPrincipalAuth
 from PIL import Image
 
-from app.services.secure_config import get_env, require_env
+from ..secure_config import get_env, require_env
 
 logger = logging.getLogger(__name__)
 
