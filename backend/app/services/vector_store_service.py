@@ -2,6 +2,9 @@ import hashlib
 import json
 import logging
 import os
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import oracledb
@@ -24,15 +27,45 @@ VECTOR_DIM = int(get_env("VECTOR_DIM", "1024"))
 TABLE_CHUNK = "XXGSC_KM_DOCUMENT_CHUNK"
 TABLE_VECTOR = "XXGSC_KM_CHUNK_VECTOR"
 TABLE_CHUNK_METADATA = "XXGSC_KM_CHUNK_METADATA"
+_RUNTIME_TNS_ADMIN: Optional[tempfile.TemporaryDirectory] = None
+
+
+def _configure_wallet_tns_admin() -> Optional[str]:
+    global _RUNTIME_TNS_ADMIN
+
+    if not WALLET_PATH:
+        return None
+
+    wallet_dir = Path(WALLET_PATH).expanduser().resolve()
+    tnsnames_path = wallet_dir / "tnsnames.ora"
+    if not tnsnames_path.exists():
+        raise FileNotFoundError(f"tnsnames.ora not found in wallet directory: {wallet_dir}")
+
+    _RUNTIME_TNS_ADMIN = tempfile.TemporaryDirectory(prefix="km_rag_tns_")
+    runtime_tns_admin = Path(_RUNTIME_TNS_ADMIN.name)
+    shutil.copy2(tnsnames_path, runtime_tns_admin / "tnsnames.ora")
+    sqlnet_source = wallet_dir / "sqlnet.ora"
+    if sqlnet_source.exists():
+        shutil.copy2(sqlnet_source, runtime_tns_admin / "sqlnet.ora.original")
+
+    (runtime_tns_admin / "sqlnet.ora").write_text(
+        (
+            f'WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="{wallet_dir}")))\n'
+            "SSL_SERVER_DN_MATCH=yes\n"
+        ),
+        encoding="utf-8",
+    )
+    os.environ["TNS_ADMIN"] = str(runtime_tns_admin)
+    return str(runtime_tns_admin)
 
 
 def init_oracle():
     try:
         mode = (ORACLE_MODE or "thin").strip().lower()
 
-        if WALLET_PATH:
-            os.environ["TNS_ADMIN"] = WALLET_PATH
-            logger.info("TNS_ADMIN set to %s", WALLET_PATH)
+        runtime_tns_admin = _configure_wallet_tns_admin()
+        if runtime_tns_admin:
+            logger.info("TNS_ADMIN set to generated network config %s", runtime_tns_admin)
 
         if mode == "thick":
             if not INSTANT_CLIENT_PATH:
@@ -73,7 +106,7 @@ def get_pool() -> oracledb.ConnectionPool:
             "getmode": oracledb.POOL_GETMODE_WAIT,
         }
         if WALLET_PATH:
-            pool_kwargs["config_dir"] = WALLET_PATH
+            pool_kwargs["config_dir"] = os.environ.get("TNS_ADMIN", WALLET_PATH)
 
         _pool = oracledb.create_pool(**pool_kwargs)
         logger.info("Oracle connection pool created")
@@ -82,12 +115,12 @@ def get_pool() -> oracledb.ConnectionPool:
 
 
 def get_connection() -> oracledb.Connection:
-    resolved_wallet_path = os.path.abspath(WALLET_PATH) if WALLET_PATH else None
+    resolved_config_dir = os.environ.get("TNS_ADMIN") or (os.path.abspath(WALLET_PATH) if WALLET_PATH else None)
     logger.info(
         "Opening Oracle connection | user=%s dsn=%s config_dir=%s cwd=%s",
         DB_USER,
         DB_TNS,
-        resolved_wallet_path,
+        resolved_config_dir,
         os.getcwd(),
     )
 
@@ -95,7 +128,7 @@ def get_connection() -> oracledb.Connection:
         user=DB_USER,
         password=DB_PASSWORD,
         dsn=DB_TNS,
-        config_dir=resolved_wallet_path,
+        config_dir=resolved_config_dir,
     )
 
 
@@ -137,6 +170,17 @@ def _read_lob_if_needed(value: Any) -> Any:
     return value.read() if hasattr(value, "read") else value
 
 
+def fetch_lobs_as_strings(cur) -> None:
+    def output_type_handler(cursor, metadata):
+        if metadata.type_code == oracledb.DB_TYPE_CLOB:
+            return cursor.var(oracledb.DB_TYPE_LONG, arraysize=cursor.arraysize)
+        if metadata.type_code == oracledb.DB_TYPE_NCLOB:
+            return cursor.var(oracledb.DB_TYPE_LONG_NVARCHAR, arraysize=cursor.arraysize)
+        return None
+
+    cur.outputtypehandler = output_type_handler
+
+
 def _serialize_metadata_json(metadata: Any) -> Optional[str]:
     if metadata is None:
         return None
@@ -157,6 +201,7 @@ def _upsert_chunk_metadata(
     metadata_json: Optional[str],
     created_by: str,
 ) -> None:
+    cur.setinputsizes(metadata_json=oracledb.DB_TYPE_CLOB)
     cur.execute(
         f"""
         MERGE INTO {TABLE_CHUNK_METADATA} tgt
@@ -284,6 +329,7 @@ def insert_embedding_payload(entry: Dict[str, Any]) -> Dict[str, str]:
     cur = conn.cursor()
 
     try:
+        cur.setinputsizes(chunk_text=oracledb.DB_TYPE_CLOB)
         cur.execute(
             f"""
             MERGE INTO {TABLE_CHUNK} tgt
@@ -475,6 +521,7 @@ def insert_document_embeddings(
 def search_similar_chunks(query_embedding: List[float], top_k: int = 12) -> List[dict]:
     conn = get_connection()
     cur = conn.cursor()
+    fetch_lobs_as_strings(cur)
 
     embedding_string = "[" + ",".join(map(str, query_embedding)) + "]"
 
