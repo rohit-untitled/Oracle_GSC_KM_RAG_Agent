@@ -9,6 +9,7 @@ from app.services.vector_store_service import (
     TABLE_VECTOR,
     _read_lob_if_needed,
     close_connection,
+    fetch_lobs_as_strings,
     get_connection,
 )
 
@@ -72,6 +73,7 @@ def _fetch_neighbor_chunks(
         return []
 
     cur = conn.cursor()
+    fetch_lobs_as_strings(cur)
     try:
         sql = f"""
             SELECT
@@ -145,6 +147,7 @@ def _fetch_keyword_hits(
         return []
 
     cur = conn.cursor()
+    fetch_lobs_as_strings(cur)
     try:
         filters = ["c.CHUNK_STATUS = 'ACTIVE'"]
         binds: Dict[str, Any] = {"fetch_rows": top_k}
@@ -229,6 +232,7 @@ def search_similar_chunks(
 ) -> List[dict]:
     conn = get_connection()
     cur = conn.cursor()
+    fetch_lobs_as_strings(cur)
 
     embedding_string = "[" + ",".join(map(str, query_embedding)) + "]"
 
