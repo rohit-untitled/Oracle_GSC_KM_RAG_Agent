@@ -28,7 +28,7 @@ class RAGRequest(BaseModel):
     session_id: Optional[str] = None
     history: List[ChatTurn] = Field(default_factory=list)
     generate_title: bool = False
-    model: Literal["cohere", "maverick", "gpt-5.2"] = "cohere"
+    model: Literal["cohere", "maverick", "gpt-5.2"] = "maverick"
     mode: Literal["instant", "thinking", "pro"] = "thinking"
     confidentiality: Literal["SCM", "ERP", "EPM"] = "SCM"
 
