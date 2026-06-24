@@ -117,19 +117,13 @@ def get_pool() -> oracledb.ConnectionPool:
 def get_connection() -> oracledb.Connection:
     resolved_config_dir = os.environ.get("TNS_ADMIN") or (os.path.abspath(WALLET_PATH) if WALLET_PATH else None)
     logger.info(
-        "Opening Oracle connection | user=%s dsn=%s config_dir=%s cwd=%s",
+        "Acquiring Oracle pooled connection | user=%s dsn=%s config_dir=%s cwd=%s",
         DB_USER,
         DB_TNS,
         resolved_config_dir,
         os.getcwd(),
     )
-
-    return oracledb.connect(
-        user=DB_USER,
-        password=DB_PASSWORD,
-        dsn=DB_TNS,
-        config_dir=resolved_config_dir,
-    )
+    return get_pool().acquire()
 
 
 def close_pool():

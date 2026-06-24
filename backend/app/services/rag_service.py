@@ -491,6 +491,21 @@ def _run_retrieval(
     confidentiality_key: str,
 ) -> List[Dict[str, Any]]:
     query_embedding = embedder.embed_text(retrieval_query)
+    return _run_retrieval_with_embedding(
+        query_embedding=query_embedding,
+        retrieval_query=retrieval_query,
+        retrieval_profile=retrieval_profile,
+        confidentiality_key=confidentiality_key,
+    )
+
+
+def _run_retrieval_with_embedding(
+    *,
+    query_embedding: List[float],
+    retrieval_query: str,
+    retrieval_profile: Dict[str, Any],
+    confidentiality_key: str,
+) -> List[Dict[str, Any]]:
     if not query_embedding:
         return []
     return search_similar_chunks(
@@ -572,9 +587,15 @@ def _retrieve_with_history_awareness(
     winning_query: Optional[str] = None
     winning_hits: List[Dict[str, Any]] = []
     best_score = -1
-    for candidate in plan["candidates"]:
+    candidate_embeddings = embedder.embed_texts(plan["candidates"])
+    for candidate, candidate_embedding in zip(plan["candidates"], candidate_embeddings):
         attempted_queries.append(candidate)
-        hits = _run_retrieval(embedder, candidate, retrieval_profile, confidentiality_key)
+        hits = _run_retrieval_with_embedding(
+            query_embedding=candidate_embedding,
+            retrieval_query=candidate,
+            retrieval_profile=retrieval_profile,
+            confidentiality_key=confidentiality_key,
+        )
         hit_groups.append(hits)
         if hits:
             candidate_score = max(_score_hit_relevance(hit, candidate) for hit in hits)
@@ -598,8 +619,15 @@ def _retrieve_with_history_awareness(
         fallback_groups: List[List[Dict[str, Any]]] = []
         fallback_candidates = _dedupe_preserve_order(plan["candidates"] + _build_runtime_query_variants(plan["original_query"]))
         best_fallback_score = best_score
-        for candidate in fallback_candidates[:6]:
-            fallback_hits = _run_retrieval(embedder, candidate, fallback_profile, confidentiality_key)
+        fallback_candidates = fallback_candidates[:6]
+        fallback_embeddings = embedder.embed_texts(fallback_candidates)
+        for candidate, candidate_embedding in zip(fallback_candidates, fallback_embeddings):
+            fallback_hits = _run_retrieval_with_embedding(
+                query_embedding=candidate_embedding,
+                retrieval_query=candidate,
+                retrieval_profile=fallback_profile,
+                confidentiality_key=confidentiality_key,
+            )
             fallback_groups.append(fallback_hits)
             if fallback_hits:
                 candidate_score = max(_score_hit_relevance(hit, candidate) for hit in fallback_hits)
@@ -624,8 +652,15 @@ def _retrieve_with_history_awareness(
             plan["candidates"] + _build_runtime_query_variants(plan["original_query"])
         )
         best_thinking_score = best_score
-        for candidate in expanded_candidates[:8]:
-            thinking_hits = _run_retrieval(embedder, candidate, thinking_fallback_profile, confidentiality_key)
+        expanded_candidates = expanded_candidates[:8]
+        expanded_embeddings = embedder.embed_texts(expanded_candidates)
+        for candidate, candidate_embedding in zip(expanded_candidates, expanded_embeddings):
+            thinking_hits = _run_retrieval_with_embedding(
+                query_embedding=candidate_embedding,
+                retrieval_query=candidate,
+                retrieval_profile=thinking_fallback_profile,
+                confidentiality_key=confidentiality_key,
+            )
             thinking_fallback_groups.append(thinking_hits)
             if thinking_hits:
                 candidate_score = max(_score_hit_relevance(hit, candidate) for hit in thinking_hits)
