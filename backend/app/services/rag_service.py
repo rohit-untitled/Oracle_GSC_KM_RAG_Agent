@@ -24,6 +24,12 @@ MAX_HISTORY_TURN_CHARS = int(get_env("MAX_HISTORY_TURN_CHARS", "1500"))
 MAX_RETRIEVAL_QUERY_CHARS = int(get_env("MAX_RETRIEVAL_QUERY_CHARS", "500"))
 MAX_RETRIEVAL_CONTEXT_TURNS = int(get_env("MAX_RETRIEVAL_CONTEXT_TURNS", "2"))
 MIN_RETRIEVAL_TOKEN_OVERLAP = int(get_env("MIN_RETRIEVAL_TOKEN_OVERLAP", "1"))
+TITLE_GENERATION_ENABLED = get_env("TITLE_GENERATION_ENABLED", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 FOLLOWUP_PATTERNS = [
     r"\bit\b",
@@ -811,9 +817,12 @@ def answer_query(
 
     generated_title = None
     if generate_title and query:
-        try:
-            generated_title = call_oci_title(query, max_words=5)
-        except Exception:
+        if TITLE_GENERATION_ENABLED:
+            try:
+                generated_title = call_oci_title(query, max_words=5)
+            except Exception:
+                generated_title = _derive_session_title(query, max_words=5)
+        else:
             generated_title = _derive_session_title(query, max_words=5)
         generated_title = _limit_title_words(generated_title, max_words=5)
 
