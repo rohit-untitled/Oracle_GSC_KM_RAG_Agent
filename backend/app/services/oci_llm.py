@@ -1,9 +1,11 @@
 import os
 import logging
+import time
 import oci
 from oci_openai import OciOpenAI, OciUserPrincipalAuth
 from oci.generative_ai_inference import GenerativeAiInferenceClient
 from app.services.secure_config import require_env, get_env
+from app.services.request_context import get_request_id
 from oci.generative_ai_inference.models import (
     ChatDetails,
     CohereChatRequest,
@@ -175,7 +177,7 @@ def _format_documents_for_context(documents: list | None) -> str:
     if not documents:
         return ""
     chunks = []
-    for i, doc in enumerate(documents, start=1):
+    for i, doc in enumerate(_normalize_cohere_documents(documents), start=1):
         title = (doc or {}).get("title", f"Document_{i}")
         snippet = (doc or {}).get("snippet", "")
         chunks.append(f"[{i}] {title}\n{snippet}")
@@ -187,6 +189,10 @@ def _trim_text(text: str, max_chars: int) -> str:
     if len(value) <= max_chars:
         return value
     return value[: max_chars - 3].rstrip() + "..."
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return int((time.perf_counter() - started_at) * 1000)
 
 
 def _format_documents_for_generic_context(documents: list | None, max_chars: int) -> str:
@@ -241,6 +247,7 @@ def call_oci_chat(
     OCI Cohere chat call with RAG + chat history (default model path).
     """
 
+    started_at = time.perf_counter()
     try:
         effective_chat_history = []
         resolved_system_prompt = _resolve_system_prompt(confidentiality)
@@ -255,12 +262,14 @@ def call_oci_chat(
 
         normalized_documents = _normalize_cohere_documents(documents)
         logger.info(
-            "Calling OCI Cohere chat | endpoint=%s model_id=%s docs=%s history_turns=%s message_chars=%s confidentiality=%s",
+            "Calling OCI Cohere chat | request_id=%s endpoint=%s model_id=%s docs=%s history_turns=%s message_chars=%s system_prompt_chars=%s confidentiality=%s",
+            get_request_id(),
             _cohere_endpoint(),
             _mask_model_id(MODEL_ID),
             len(normalized_documents),
             len(chat_history or []),
             len((message or "").strip()),
+            len(resolved_system_prompt),
             (confidentiality or "SCM").strip().upper(),
         )
 
@@ -287,7 +296,15 @@ def call_oci_chat(
         )
 
         response = oci_client.chat(chat_details)
-        return response.data.chat_response.text.strip()
+        output = response.data.chat_response.text.strip()
+        logger.info(
+            "ask_timing | request_id=%s | stage=llm.oci_cohere | elapsed_ms=%s | docs=%s output_chars=%s",
+            get_request_id(),
+            _elapsed_ms(started_at),
+            len(normalized_documents),
+            len(output),
+        )
+        return output
 
     except Exception as e:
         logger.error("OCI Chat failed", exc_info=True)
@@ -305,8 +322,10 @@ def call_oci_chat_maverick(
     """
     OCI OpenAI chat call (Maverick) with RAG + chat history.
     """
+    started_at = time.perf_counter()
     try:
-        messages = [{"role": "system", "content": _resolve_system_prompt(confidentiality)}]
+        resolved_system_prompt = _resolve_system_prompt(confidentiality)
+        messages = [{"role": "system", "content": resolved_system_prompt}]
 
         doc_context = _format_documents_for_context(documents)
         if doc_context:
@@ -332,13 +351,17 @@ def call_oci_chat_maverick(
                     messages.append({"role": "assistant", "content": msg})
 
         messages.append({"role": "user", "content": message})
+        prompt_chars = sum(len((item.get("content") or "")) for item in messages)
         logger.info(
-            "Calling OCI Maverick chat | region=%s model=%s docs=%s history_turns=%s message_chars=%s confidentiality=%s",
+            "Calling OCI Maverick chat | request_id=%s region=%s model=%s docs=%s history_turns=%s message_chars=%s prompt_chars=%s system_prompt_chars=%s confidentiality=%s",
+            get_request_id(),
             OCI_REGION,
             OCI_OPENAI_MODEL,
             len(documents or []),
             len(chat_history or []),
             len((message or "").strip()),
+            prompt_chars,
+            len(resolved_system_prompt),
             (confidentiality or "SCM").strip().upper(),
         )
 
@@ -349,7 +372,16 @@ def call_oci_chat_maverick(
             max_tokens=CHAT_MAX_TOKENS,
             temperature=CHAT_TEMPERATURE,
         )
-        return _extract_openai_content(completion)
+        output = _extract_openai_content(completion)
+        logger.info(
+            "ask_timing | request_id=%s | stage=llm.oci_maverick | elapsed_ms=%s | docs=%s prompt_chars=%s output_chars=%s",
+            get_request_id(),
+            _elapsed_ms(started_at),
+            len(documents or []),
+            prompt_chars,
+            len(output),
+        )
+        return output
     except Exception as e:
         logger.error("OCI Maverick chat failed", exc_info=True)
         if _is_timeout_error(e):
@@ -366,6 +398,7 @@ def call_oci_chat_generic(
     """
     OCI native GenericChatRequest call with a model OCID.
     """
+    started_at = time.perf_counter()
     try:
         prompt_parts = [_resolve_system_prompt(confidentiality)]
 
@@ -402,7 +435,8 @@ def call_oci_chat_generic(
             OCI_GENERIC_MAX_PROMPT_CHARS,
         )
         logger.info(
-            "Calling OCI Generic chat | endpoint=%s model_id=%s docs=%s history_turns=%s prompt_chars=%s confidentiality=%s",
+            "Calling OCI Generic chat | request_id=%s endpoint=%s model_id=%s docs=%s history_turns=%s prompt_chars=%s confidentiality=%s",
+            get_request_id(),
             _generic_endpoint(),
             _mask_model_id(OCI_GENERIC_MODEL_ID),
             len(documents or []),
@@ -442,7 +476,16 @@ def call_oci_chat_generic(
             if text:
                 output_parts.append(text)
 
-        return "\n".join(output_parts).strip()
+        output = "\n".join(output_parts).strip()
+        logger.info(
+            "ask_timing | request_id=%s | stage=llm.oci_generic | elapsed_ms=%s | docs=%s prompt_chars=%s output_chars=%s",
+            get_request_id(),
+            _elapsed_ms(started_at),
+            len(documents or []),
+            len(full_prompt),
+            len(output),
+        )
+        return output
 
     except Exception as e:
         logger.error("OCI Generic chat failed", exc_info=True)

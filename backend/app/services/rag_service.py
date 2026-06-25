@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from typing import Any, Dict, List, Optional
 
 from app.services.embedding_service import OCIEmbeddingService
@@ -10,6 +11,7 @@ from app.services.oci_llm import (
     call_oci_title,
 )
 from app.services.retrieval_service import search_similar_chunks
+from app.services.request_context import get_request_id
 from app.services.secure_config import get_env
 
 
@@ -30,6 +32,27 @@ TITLE_GENERATION_ENABLED = get_env("TITLE_GENERATION_ENABLED", "false").strip().
     "yes",
     "on",
 }
+ASK_TIMING_DEBUG = get_env("ASK_TIMING_DEBUG", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+ASK_LOG_RETRIEVAL_TEXT = get_env("ASK_LOG_RETRIEVAL_TEXT", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+ASK_LOG_SOURCE_NAMES = get_env("ASK_LOG_SOURCE_NAMES", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+THINKING_MAX_INITIAL_CANDIDATES = int(get_env("THINKING_MAX_INITIAL_CANDIDATES", "3"))
+PRO_MAX_INITIAL_CANDIDATES = int(get_env("PRO_MAX_INITIAL_CANDIDATES", "4"))
+INSTANT_MAX_INITIAL_CANDIDATES = int(get_env("INSTANT_MAX_INITIAL_CANDIDATES", "2"))
 
 FOLLOWUP_PATTERNS = [
     r"\bit\b",
@@ -117,18 +140,24 @@ RETRIEVAL_PROFILES = {
         "rerank_top_n": 4,
         "neighbor_radius": 0,
         "use_hybrid": False,
+        "adaptive_hybrid": False,
+        "hybrid_min_vector_overlap": 2,
     },
     "thinking": {
         "top_k": 8,
         "rerank_top_n": 12,
         "neighbor_radius": 1,
         "use_hybrid": True,
+        "adaptive_hybrid": True,
+        "hybrid_min_vector_overlap": 2,
     },
     "pro": {
         "top_k": 12,
         "rerank_top_n": 18,
         "neighbor_radius": 2,
         "use_hybrid": True,
+        "adaptive_hybrid": True,
+        "hybrid_min_vector_overlap": 3,
     },
 }
 
@@ -152,6 +181,31 @@ def _truncate_text(value: str, max_chars: int) -> str:
     if len(normalized) <= max_chars:
         return normalized
     return normalized[: max_chars - 3].rstrip() + "..."
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return int((time.perf_counter() - started_at) * 1000)
+
+
+def _log_timing(stage: str, started_at: float, **fields: Any) -> Dict[str, Any]:
+    elapsed_ms = _elapsed_ms(started_at)
+    field_text = " ".join(f"{key}={value}" for key, value in fields.items())
+    if field_text:
+        logger.info(
+            "ask_timing | request_id=%s | stage=%s | elapsed_ms=%s | %s",
+            get_request_id(),
+            stage,
+            elapsed_ms,
+            field_text,
+        )
+    else:
+        logger.info(
+            "ask_timing | request_id=%s | stage=%s | elapsed_ms=%s",
+            get_request_id(),
+            stage,
+            elapsed_ms,
+        )
+    return {"stage": stage, "elapsed_ms": elapsed_ms, **fields}
 
 
 def _dedupe_preserve_order(values: List[str]) -> List[str]:
@@ -521,6 +575,8 @@ def _run_retrieval_with_embedding(
         rerank_top_n=retrieval_profile["rerank_top_n"],
         neighbor_radius=retrieval_profile["neighbor_radius"],
         use_hybrid=retrieval_profile["use_hybrid"],
+        adaptive_hybrid=retrieval_profile.get("adaptive_hybrid", False),
+        hybrid_min_vector_overlap=retrieval_profile.get("hybrid_min_vector_overlap", 2),
         confidentiality=confidentiality_key,
     )
 
@@ -585,23 +641,54 @@ def _retrieve_with_history_awareness(
     retrieval_profile: Dict[str, Any],
     confidentiality_key: str,
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    retrieval_started_at = time.perf_counter()
     embedder = OCIEmbeddingService()
+    embedder_init_timing = _log_timing("retrieval.embedder_init", retrieval_started_at)
+
+    plan_started_at = time.perf_counter()
     plan = _build_retrieval_candidates(query, incoming_history)
+    plan_timing = _log_timing(
+        "retrieval.plan",
+        plan_started_at,
+        classification=plan["classification"],
+        candidates=len(plan["candidates"]),
+    )
     hit_groups: List[List[Dict[str, Any]]] = []
     attempted_queries: List[str] = []
+    timing_details: List[Dict[str, Any]] = [embedder_init_timing, plan_timing]
 
     winning_query: Optional[str] = None
     winning_hits: List[Dict[str, Any]] = []
     best_score = -1
-    candidate_embeddings = embedder.embed_texts(plan["candidates"])
-    for candidate, candidate_embedding in zip(plan["candidates"], candidate_embeddings):
+    candidate_limit_by_mode = {
+        "instant": INSTANT_MAX_INITIAL_CANDIDATES,
+        "thinking": THINKING_MAX_INITIAL_CANDIDATES,
+        "pro": PRO_MAX_INITIAL_CANDIDATES,
+    }
+    candidate_limit = max(1, candidate_limit_by_mode.get(retrieval_profile["mode"], THINKING_MAX_INITIAL_CANDIDATES))
+    initial_candidates = plan["candidates"][:candidate_limit]
+
+    def _search_candidate(
+        candidate_index: int,
+        candidate: str,
+        candidate_embedding: List[float],
+    ) -> bool:
+        nonlocal best_score, winning_query, winning_hits
+
         attempted_queries.append(candidate)
+        search_started_at = time.perf_counter()
         hits = _run_retrieval_with_embedding(
             query_embedding=candidate_embedding,
             retrieval_query=candidate,
             retrieval_profile=retrieval_profile,
             confidentiality_key=confidentiality_key,
         )
+        timing_details.append(_log_timing(
+            "retrieval.search_candidate",
+            search_started_at,
+            candidate_index=candidate_index,
+            hits=len(hits),
+        ))
         hit_groups.append(hits)
         if hits:
             candidate_score = max(_score_hit_relevance(hit, candidate) for hit in hits)
@@ -609,6 +696,45 @@ def _retrieve_with_history_awareness(
                 best_score = candidate_score
                 winning_query = candidate
                 winning_hits = hits
+            if _retrieval_has_sufficient_signal(hits, candidate):
+                logger.info(
+                    "Retrieval early stop | request_id=%s mode=%s candidate_index=%s score=%s hits=%s",
+                    get_request_id(),
+                    retrieval_profile["mode"],
+                    candidate_index,
+                    candidate_score,
+                    len(hits),
+                )
+                return True
+        return False
+
+    if initial_candidates:
+        first_candidate = initial_candidates[0]
+        embedding_started_at = time.perf_counter()
+        first_embedding = embedder.embed_texts([first_candidate])[0]
+        timing_details.append(_log_timing(
+            "retrieval.embed_candidate",
+            embedding_started_at,
+            candidate_index=1,
+        ))
+        should_stop = _search_candidate(1, first_candidate, first_embedding)
+
+        remaining_candidates = initial_candidates[1:]
+        if remaining_candidates and not should_stop:
+            embedding_started_at = time.perf_counter()
+            remaining_embeddings = embedder.embed_texts(remaining_candidates)
+            timing_details.append(_log_timing(
+                "retrieval.embed_candidates",
+                embedding_started_at,
+                candidates=len(remaining_candidates),
+                start_index=2,
+            ))
+            for offset, (candidate, candidate_embedding) in enumerate(
+                zip(remaining_candidates, remaining_embeddings),
+                start=2,
+            ):
+                if _search_candidate(offset, candidate, candidate_embedding):
+                    break
 
     merged_hits = _merge_hits(hit_groups, retrieval_profile["top_k"])
     if winning_hits and _retrieval_has_sufficient_signal(winning_hits, winning_query or plan["original_query"]):
@@ -621,19 +747,34 @@ def _retrieve_with_history_awareness(
             "rerank_top_n": 16,
             "neighbor_radius": 2,
             "use_hybrid": True,
+            "adaptive_hybrid": True,
+            "hybrid_min_vector_overlap": 2,
         })
         fallback_groups: List[List[Dict[str, Any]]] = []
         fallback_candidates = _dedupe_preserve_order(plan["candidates"] + _build_runtime_query_variants(plan["original_query"]))
         best_fallback_score = best_score
-        fallback_candidates = fallback_candidates[:6]
+        fallback_candidates = fallback_candidates[:4]
+        fallback_started_at = time.perf_counter()
         fallback_embeddings = embedder.embed_texts(fallback_candidates)
+        timing_details.append(_log_timing(
+            "retrieval.instant_fallback_embed",
+            fallback_started_at,
+            candidates=len(fallback_candidates),
+        ))
         for candidate, candidate_embedding in zip(fallback_candidates, fallback_embeddings):
+            attempted_queries.append(candidate)
+            search_started_at = time.perf_counter()
             fallback_hits = _run_retrieval_with_embedding(
                 query_embedding=candidate_embedding,
                 retrieval_query=candidate,
                 retrieval_profile=fallback_profile,
                 confidentiality_key=confidentiality_key,
             )
+            timing_details.append(_log_timing(
+                "retrieval.instant_fallback_search",
+                search_started_at,
+                hits=len(fallback_hits),
+            ))
             fallback_groups.append(fallback_hits)
             if fallback_hits:
                 candidate_score = max(_score_hit_relevance(hit, candidate) for hit in fallback_hits)
@@ -652,21 +793,36 @@ def _retrieve_with_history_awareness(
             "rerank_top_n": max(retrieval_profile["rerank_top_n"], 18),
             "neighbor_radius": max(retrieval_profile["neighbor_radius"], 2),
             "use_hybrid": True,
+            "adaptive_hybrid": True,
+            "hybrid_min_vector_overlap": retrieval_profile.get("hybrid_min_vector_overlap", 2),
         })
         thinking_fallback_groups: List[List[Dict[str, Any]]] = []
         expanded_candidates = _dedupe_preserve_order(
             plan["candidates"] + _build_runtime_query_variants(plan["original_query"])
         )
         best_thinking_score = best_score
-        expanded_candidates = expanded_candidates[:8]
+        expanded_candidates = expanded_candidates[:4]
+        fallback_started_at = time.perf_counter()
         expanded_embeddings = embedder.embed_texts(expanded_candidates)
+        timing_details.append(_log_timing(
+            "retrieval.thinking_fallback_embed",
+            fallback_started_at,
+            candidates=len(expanded_candidates),
+        ))
         for candidate, candidate_embedding in zip(expanded_candidates, expanded_embeddings):
+            attempted_queries.append(candidate)
+            search_started_at = time.perf_counter()
             thinking_hits = _run_retrieval_with_embedding(
                 query_embedding=candidate_embedding,
                 retrieval_query=candidate,
                 retrieval_profile=thinking_fallback_profile,
                 confidentiality_key=confidentiality_key,
             )
+            timing_details.append(_log_timing(
+                "retrieval.thinking_fallback_search",
+                search_started_at,
+                hits=len(thinking_hits),
+            ))
             thinking_fallback_groups.append(thinking_hits)
             if thinking_hits:
                 candidate_score = max(_score_hit_relevance(hit, candidate) for hit in thinking_hits)
@@ -691,15 +847,24 @@ def _retrieve_with_history_awareness(
             ((hit or {}).get("metadata", {}) or {}).get("source_file")
             for hit in merged_hits[:3]
         ],
+        "timings": timing_details,
+        "elapsed_ms": _elapsed_ms(retrieval_started_at),
     }
     logger.info(
-        "Retrieval plan | classification=%s | original=%s | candidates=%s | winning_query=%s | hits=%s | sources=%s",
+        "Retrieval plan | request_id=%s classification=%s query_chars=%s candidate_count=%s winning_query=%s hits=%s sources=%s",
+        get_request_id(),
         retrieval_debug["classification"],
-        retrieval_debug["original_query"],
-        retrieval_debug["candidate_queries"],
-        retrieval_debug["winning_query"],
+        len(retrieval_debug["original_query"] or ""),
+        len(retrieval_debug["candidate_queries"]),
+        retrieval_debug["winning_query"] if ASK_LOG_RETRIEVAL_TEXT else "[hidden]",
         retrieval_debug["hit_count"],
-        retrieval_debug["top_sources"],
+        retrieval_debug["top_sources"] if ASK_LOG_SOURCE_NAMES else f"{len(retrieval_debug['top_sources'])} source(s)",
+    )
+    _log_timing(
+        "retrieval.total",
+        retrieval_started_at,
+        hits=retrieval_debug["hit_count"],
+        attempted_queries=len(attempted_queries),
     )
     return merged_hits, retrieval_debug
 
@@ -727,6 +892,7 @@ def answer_query(
     mode: str = "thinking",
     confidentiality: str = "SCM",
 ) -> Dict[str, Any]:
+    answer_started_at = time.perf_counter()
     model_key = (model or DEFAULT_CHAT_MODEL).strip().lower()
     if model_key not in SUPPORTED_CHAT_MODELS:
         model_key = DEFAULT_CHAT_MODEL
@@ -740,12 +906,20 @@ def answer_query(
         confidentiality_key = "SCM"
 
     retrieval_profile = _resolve_retrieval_profile(mode, top_k)
+    retrieval_started_at = time.perf_counter()
     hits, retrieval_debug = _retrieve_with_history_awareness(
         query=query,
         incoming_history=incoming_history,
         retrieval_profile=retrieval_profile,
         confidentiality_key=confidentiality_key,
     )
+    retrieval_timing = _log_timing(
+        "answer.retrieval",
+        retrieval_started_at,
+        hits=len(hits),
+        mode=retrieval_profile["mode"],
+    )
+    context_started_at = time.perf_counter()
     generation_history = _select_generation_history(incoming_history, retrieval_debug)
 
     documents = []
@@ -790,7 +964,14 @@ def answer_query(
             "title": "No matching knowledge found",
             "snippet": "I couldn’t find a matching project document for this question. I’ll answer using general Oracle Fusion guidance, and I’ll call out what would need confirmation from the relevant setup workbook, mapping file, design document, or implementation document.",
         }]
+    context_timing = _log_timing(
+        "answer.context_build",
+        context_started_at,
+        documents=len(documents),
+        history_turns=len(generation_history),
+    )
 
+    llm_started_at = time.perf_counter()
     if model_key == "maverick":
         llm_output = call_oci_chat_maverick(
             message=query,
@@ -812,11 +993,21 @@ def answer_query(
             documents=documents,
             confidentiality=confidentiality_key,
         )
+    llm_timing = _log_timing(
+        "answer.llm",
+        llm_started_at,
+        model=model_key,
+        answer_chars=len(llm_output or ""),
+    )
 
+    citation_started_at = time.perf_counter()
     llm_output = _enforce_citations(llm_output, hits)
+    citation_timing = _log_timing("answer.citations", citation_started_at, citations=len(hits))
 
     generated_title = None
+    title_timing = None
     if generate_title and query:
+        title_started_at = time.perf_counter()
         if TITLE_GENERATION_ENABLED:
             try:
                 generated_title = call_oci_title(query, max_words=5)
@@ -825,6 +1016,20 @@ def answer_query(
         else:
             generated_title = _derive_session_title(query, max_words=5)
         generated_title = _limit_title_words(generated_title, max_words=5)
+        title_timing = _log_timing("answer.title", title_started_at, generated=bool(generated_title))
+
+    total_timing = _log_timing("answer.total", answer_started_at, model=model_key, mode=retrieval_profile["mode"])
+
+    timings = [
+        retrieval_timing,
+        *retrieval_debug.get("timings", []),
+        context_timing,
+        llm_timing,
+        citation_timing,
+    ]
+    if title_timing:
+        timings.append(title_timing)
+    timings.append(total_timing)
 
     return {
         "answer": llm_output,
@@ -840,11 +1045,14 @@ def answer_query(
             "rerank_top_n": retrieval_profile["rerank_top_n"],
             "neighbor_radius": retrieval_profile["neighbor_radius"],
             "use_hybrid": retrieval_profile["use_hybrid"],
+            "adaptive_hybrid": retrieval_profile.get("adaptive_hybrid", False),
+            "hybrid_min_vector_overlap": retrieval_profile.get("hybrid_min_vector_overlap", 2),
             "confidentiality": confidentiality_key,
             "query_classification": retrieval_debug["classification"],
             "retrieval_queries": retrieval_debug["candidate_queries"],
             "winning_query": retrieval_debug["winning_query"],
             "relevance_passed": retrieval_debug["relevance_passed"],
             "generation_history_used": len(generation_history),
+            **({"timings": timings} if ASK_TIMING_DEBUG else {}),
         },
     }

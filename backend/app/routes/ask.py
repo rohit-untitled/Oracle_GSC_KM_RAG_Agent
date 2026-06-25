@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.services.oci_llm import LLMTimeoutError
 from app.services.rag_service import answer_query
+from app.services.request_context import get_request_id, reset_request_id, set_request_id
 from app.services.secure_config import get_env
 
 
@@ -46,6 +48,29 @@ class ChatModelsResponse(BaseModel):
 def _estimate_tokens(text: str) -> int:
     # Lightweight approximation for server-side budget control.
     return max(1, len((text or "").strip()) // 4)
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return int((time.perf_counter() - started_at) * 1000)
+
+
+def _log_ask_timing(stage: str, started_at: float, **fields: Any) -> None:
+    field_text = " ".join(f"{key}={value}" for key, value in fields.items())
+    if field_text:
+        logger.info(
+            "ask_timing | request_id=%s | stage=%s | elapsed_ms=%s | %s",
+            get_request_id(),
+            stage,
+            _elapsed_ms(started_at),
+            field_text,
+        )
+    else:
+        logger.info(
+            "ask_timing | request_id=%s | stage=%s | elapsed_ms=%s",
+            get_request_id(),
+            stage,
+            _elapsed_ms(started_at),
+        )
 
 
 def _normalize_history(history: List[ChatTurn]) -> List[Dict[str, str]]:
@@ -113,6 +138,15 @@ def _process_ask(
     query_tokens: int,
 ) -> Dict[str, Any]:
     started_at = time.perf_counter()
+    logger.info(
+        "ask_timing | request_id=%s | stage=ask.answer_query_start | mode=%s model=%s history_turns=%s query_tokens=%s history_tokens=%s",
+        get_request_id(),
+        payload.mode,
+        payload.model,
+        len(history_payload),
+        query_tokens,
+        history_tokens,
+    )
     response = answer_query(
         query=query,
         top_k=payload.top_k,
@@ -123,8 +157,16 @@ def _process_ask(
         confidentiality=payload.confidentiality,
     )
     elapsed_seconds = time.perf_counter() - started_at
+    logger.info(
+        "ask_timing | request_id=%s | stage=ask.answer_query_complete | elapsed_ms=%s | mode=%s model=%s",
+        get_request_id(),
+        int(elapsed_seconds * 1000),
+        response.get("retrieval_config", {}).get("mode", payload.mode),
+        response.get("model_used", payload.model),
+    )
     return {
         "session_id": payload.session_id,
+        "request_id": get_request_id(),
         "answer": response["answer"],
         "chunks": response["chunks"],
         "citations": response.get("citations", []),
@@ -156,11 +198,16 @@ def list_chat_models():
 
 @router.post("/ask")
 def ask_endpoint(payload: RAGRequest):
+    request_started_at = time.perf_counter()
+    request_id = uuid.uuid4().hex[:12]
+    request_token = set_request_id(request_id)
     query = (payload.query or "").strip()
     if not query:
+        reset_request_id(request_token)
         raise HTTPException(status_code=400, detail="Query cannot be empty")
     logger.info(
-        "Received ask request | model=%s confidentiality=%s mode=%s session_id=%s query_chars=%s history_turns=%s",
+        "Received ask request | request_id=%s model=%s confidentiality=%s mode=%s session_id=%s query_chars=%s history_turns=%s",
+        get_request_id(),
         payload.model,
         payload.confidentiality,
         payload.mode,
@@ -170,6 +217,7 @@ def ask_endpoint(payload: RAGRequest):
     )
 
     try:
+        prep_started_at = time.perf_counter()
         history_payload = _normalize_history(payload.history)
         history_payload = _sanitize_request_history(history_payload, query)
         history_payload, history_tokens, query_tokens = _apply_history_limits(
@@ -178,30 +226,49 @@ def ask_endpoint(payload: RAGRequest):
             max_turns=ASK_MAX_TURNS,
             max_input_tokens=ASK_MAX_INPUT_TOKENS,
         )
-        return _process_ask(
+        _log_ask_timing(
+            "ask.prepare_request",
+            prep_started_at,
+            history_turns=len(history_payload),
+            query_tokens=query_tokens,
+            history_tokens=history_tokens,
+        )
+        result = _process_ask(
             payload=payload,
             query=query,
             history_payload=history_payload,
             history_tokens=history_tokens,
             query_tokens=query_tokens,
         )
+        _log_ask_timing(
+            "ask.total",
+            request_started_at,
+            mode=result.get("mode"),
+            model=result.get("model"),
+            time_taken=result.get("time_taken"),
+        )
+        return result
     except HTTPException:
         raise
     except LLMTimeoutError as e:
-        logger.warning("LLM timeout while processing ask request: %s", e)
+        logger.warning("LLM timeout while processing ask request | request_id=%s error=%s", get_request_id(), e)
         raise HTTPException(
             status_code=504,
             detail={
                 "message": "The knowledge assistant took too long to respond.",
                 "error": "LLM request timed out. Please retry, use a shorter question, or try a different model.",
+                "request_id": get_request_id(),
             },
         )
     except Exception as e:
-        logger.exception(f"Error in RAG query: {e}")
+        logger.exception("Error in RAG query | request_id=%s error=%s", get_request_id(), e)
         raise HTTPException(
             status_code=500,
             detail={
                 "message": "Failed to process ask request.",
                 "error": "Internal server error while generating response.",
+                "request_id": get_request_id(),
             },
         )
+    finally:
+        reset_request_id(request_token)
