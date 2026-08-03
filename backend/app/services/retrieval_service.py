@@ -26,6 +26,14 @@ VECTOR_TARGET_ACCURACY = min(
     100,
     max(1, int(get_env("RETRIEVAL_VECTOR_TARGET_ACCURACY", "95"))),
 )
+# The current keyword implementation uses CLOB LIKE predicates. Keep this off
+# until it is replaced by an Oracle Text CONTEXT-index-backed implementation.
+ENABLE_KEYWORD_FALLBACK = get_env("RETRIEVAL_ENABLE_KEYWORD_FALLBACK", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 MAX_NEIGHBOR_SEEDS = int(get_env("RETRIEVAL_MAX_NEIGHBOR_SEEDS", "4"))
 HYBRID_KEYWORD_MIN_VECTOR_OVERLAP = int(get_env("RETRIEVAL_HYBRID_MIN_VECTOR_OVERLAP", "2"))
 RETRIEVAL_LOG_SIGNAL_TERMS = get_env("RETRIEVAL_LOG_SIGNAL_TERMS", "false").strip().lower() in {
@@ -278,16 +286,17 @@ def _fetch_keyword_hits(
     fetch_lobs_as_strings(cur)
     try:
         filters = ["c.CHUNK_STATUS = 'ACTIVE'"]
-        binds: Dict[str, Any] = {"fetch_rows": top_k}
-
-        keyword_clauses = []
-        for idx, keyword in enumerate(keywords):
-            bind_key = f"kw_{idx}"
-            keyword_clauses.append(f"LOWER(c.CHUNK_TEXT) LIKE :{bind_key}")
-            binds[bind_key] = f"%{keyword}%"
-
-        if keyword_clauses:
-            filters.append("(" + " OR ".join(keyword_clauses) + ")")
+        # Oracle Text evaluates this against a CONTEXT index instead of scanning
+        # every CLOB with LIKE. Include the exact term as well as fuzzy variants
+        # to retain exact-match behavior and tolerate ordinary misspellings.
+        text_expression = " OR ".join(
+            f"({keyword} OR FUZZY({keyword}, 70, 25, WEIGHT))"
+            for keyword in keywords
+        )
+        binds: Dict[str, Any] = {
+            "fetch_rows": top_k,
+            "text_expression": text_expression,
+        }
 
         if document_type:
             filters.append("m.DOCUMENT_TYPE = :document_type")
@@ -333,7 +342,8 @@ def _fetch_keyword_hits(
             LEFT JOIN XXGSC_KM_CHUNK_METADATA m
               ON m.CHUNK_ID = c.CHUNK_ID
             WHERE {' AND '.join(filters)}
-            ORDER BY c.CHUNK_ID
+              AND CONTAINS(c.CHUNK_TEXT, :text_expression, 1) > 0
+            ORDER BY SCORE(1) DESC
             FETCH FIRST :fetch_rows ROWS ONLY
         """
         cur.execute(sql, binds)
@@ -564,7 +574,7 @@ def search_similar_chunks(
             metadata["vector_rank"] = rank
 
         keyword_hits: List[Dict[str, Any]] = []
-        if use_hybrid and query_text:
+        if use_hybrid and query_text and ENABLE_KEYWORD_FALLBACK:
             if adaptive_hybrid and _has_sufficient_vector_signal(
                 hits=candidate_hits,
                 query_text=query_text,
@@ -593,6 +603,11 @@ def search_similar_chunks(
                     len(keyword_hits),
                     _elapsed_ms(keyword_started_at),
                 )
+        elif use_hybrid and query_text:
+            logger.info(
+                "retrieval_timing | request_id=%s | stage=keyword_search_skipped | reason=keyword_fallback_disabled",
+                get_request_id(),
+            )
 
         merge_started_at = time.perf_counter()
         merged_candidates = _merge_and_rank_candidates(
