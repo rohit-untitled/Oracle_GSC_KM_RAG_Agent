@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 MAX_KEYWORD_TERMS = int(get_env("RETRIEVAL_MAX_KEYWORD_TERMS", "6"))
 LOB_SUBSTR_CHARS = min(4000, max(1, int(get_env("RETRIEVAL_LOB_SUBSTR_CHARS", "4000"))))
 DB_CALL_TIMEOUT_MS = int(get_env("RETRIEVAL_DB_CALL_TIMEOUT_MS", "45000"))
+VECTOR_TARGET_ACCURACY = min(
+    100,
+    max(1, int(get_env("RETRIEVAL_VECTOR_TARGET_ACCURACY", "95"))),
+)
 MAX_NEIGHBOR_SEEDS = int(get_env("RETRIEVAL_MAX_NEIGHBOR_SEEDS", "4"))
 HYBRID_KEYWORD_MIN_VECTOR_OVERLAP = int(get_env("RETRIEVAL_HYBRID_MIN_VECTOR_OVERLAP", "2"))
 RETRIEVAL_LOG_SIGNAL_TERMS = get_env("RETRIEVAL_LOG_SIGNAL_TERMS", "false").strip().lower() in {
@@ -535,7 +539,8 @@ def search_similar_chunks(
               ON m.CHUNK_ID = c.CHUNK_ID
             WHERE {' AND '.join(filters)}
             ORDER BY v.EMBEDDING_VECTOR <=> TO_VECTOR(:embedding_string)
-            FETCH FIRST :fetch_rows ROWS ONLY
+            FETCH APPROXIMATE FIRST :fetch_rows ROWS ONLY
+            WITH TARGET ACCURACY {VECTOR_TARGET_ACCURACY}
         """
 
         try:
@@ -544,11 +549,12 @@ def search_similar_chunks(
         finally:
             cur.close()
         logger.info(
-            "retrieval_timing | request_id=%s | stage=vector_search | fetch_rows=%s hits=%s filters=%s elapsed_ms=%s",
+            "retrieval_timing | request_id=%s | stage=vector_search | fetch_rows=%s hits=%s filters=%s target_accuracy=%s elapsed_ms=%s",
             get_request_id(),
             fetch_rows,
             len(candidate_hits),
             len(filters),
+            VECTOR_TARGET_ACCURACY,
             _elapsed_ms(vector_started_at),
         )
 
