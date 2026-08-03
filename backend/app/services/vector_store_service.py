@@ -23,6 +23,7 @@ ORACLE_MODE = get_env("ORACLE_MODE", "thin")
 INSTANT_CLIENT_PATH = get_env("ORACLE_INSTANT_CLIENT")
 
 VECTOR_DIM = int(get_env("VECTOR_DIM", "1024"))
+STORE_VECTOR_COMMIT_BATCH_SIZE = max(1, int(get_env("STORE_VECTOR_COMMIT_BATCH_SIZE", "100")))
 
 TABLE_CHUNK = "XXGSC_KM_DOCUMENT_CHUNK"
 TABLE_VECTOR = "XXGSC_KM_CHUNK_VECTOR"
@@ -291,7 +292,12 @@ def insert_embedding_record(
     return insert_embedding_payload(payload)
 
 
-def insert_embedding_payload(entry: Dict[str, Any]) -> Dict[str, str]:
+def insert_embedding_payload(
+    entry: Dict[str, Any],
+    *,
+    conn: Optional[oracledb.Connection] = None,
+    commit: bool = True,
+) -> Dict[str, str]:
     emb = entry.get("embedding")
     if not emb or not isinstance(emb, list):
         raise ValueError("embedding must be a non-empty list")
@@ -319,7 +325,9 @@ def insert_embedding_payload(entry: Dict[str, Any]) -> Dict[str, str]:
     row_number = entry.get("row_number") or chunk_metadata.get("row_number")
     metadata_json = _serialize_metadata_json(chunk_metadata)
 
-    conn = get_connection()
+    owns_connection = conn is None
+    if conn is None:
+        conn = get_connection()
     cur = conn.cursor()
 
     try:
@@ -391,6 +399,9 @@ def insert_embedding_payload(entry: Dict[str, Any]) -> Dict[str, str]:
             },
         )
 
+        # A 1,024/1,536 dimension vector serialized as JSON-like text is often
+        # larger than VARCHAR2's bind limit. Bind it as a CLOB for TO_VECTOR.
+        cur.setinputsizes(embedding_string=oracledb.DB_TYPE_CLOB)
         cur.execute(
             f"""
             MERGE INTO {TABLE_VECTOR} tgt
@@ -455,11 +466,25 @@ def insert_embedding_payload(entry: Dict[str, Any]) -> Dict[str, str]:
             created_by=created_by,
         )
 
-        conn.commit()
+        if commit:
+            conn.commit()
         return {"chunk_id": chunk_id, "status": "upserted"}
+    except Exception:
+        metadata = entry.get("metadata") or {}
+        logger.exception(
+            "Failed to store vector | document_id=%s chunk_index=%s sheet=%s row=%s chunk_chars=%s metadata_chars=%s",
+            document_id,
+            chunk_index,
+            metadata.get("sheet_name"),
+            metadata.get("row_number"),
+            len(chunk_text),
+            len(metadata_json or ""),
+        )
+        raise
     finally:
         cur.close()
-        close_connection(conn)
+        if owns_connection:
+            close_connection(conn)
 
 
 def insert_embeddings_from_json(json_file_path: str) -> int:
@@ -487,29 +512,46 @@ def insert_document_embeddings(
     chunks: List[Dict[str, Any]],
     created_by: str = "KM_RAG_AGENT",
 ) -> int:
+    if not chunks:
+        raise ValueError("No valid chunks available to store")
+
     inserted = 0
-
-    for idx, entry in enumerate(chunks):
-        payload = {
-            "document_id": document_id,
-            "run_id": run_id,
-            "chunk_id": entry.get("chunk_id"),
-            "chunk_index": entry.get("chunk_index", idx),
-            "heading": entry.get("heading"),
-            "source_file": entry.get("source_file"),
-            "chunk": entry.get("chunk", ""),
-            "embedding": entry.get("embedding"),
-            "document_type": entry.get("document_type"),
-            "sheet_name": entry.get("sheet_name"),
-            "row_number": entry.get("row_number"),
-            "page_number": entry.get("page_number"),
-            "metadata": entry.get("metadata"),
-            "created_by": created_by,
-        }
-        insert_embedding_payload(payload)
-        inserted += 1
-
-    return inserted
+    conn = get_connection()
+    try:
+        for idx, entry in enumerate(chunks):
+            payload = {
+                "document_id": document_id,
+                "run_id": run_id,
+                "chunk_id": entry.get("chunk_id"),
+                "chunk_index": entry.get("chunk_index", idx),
+                "heading": entry.get("heading"),
+                "source_file": entry.get("source_file"),
+                "chunk": entry.get("chunk", ""),
+                "embedding": entry.get("embedding"),
+                "document_type": entry.get("document_type"),
+                "sheet_name": entry.get("sheet_name"),
+                "row_number": entry.get("row_number"),
+                "page_number": entry.get("page_number"),
+                "metadata": entry.get("metadata"),
+                "created_by": created_by,
+            }
+            insert_embedding_payload(payload, conn=conn, commit=False)
+            inserted += 1
+            if inserted % STORE_VECTOR_COMMIT_BATCH_SIZE == 0:
+                conn.commit()
+                logger.info(
+                    "Stored vector batch | document_id=%s stored=%s batch_size=%s",
+                    document_id,
+                    inserted,
+                    STORE_VECTOR_COMMIT_BATCH_SIZE,
+                )
+        conn.commit()
+        return inserted
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        close_connection(conn)
 
 
 def search_similar_chunks(query_embedding: List[float], top_k: int = 12) -> List[dict]:

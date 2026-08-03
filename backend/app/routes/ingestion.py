@@ -55,6 +55,7 @@ AUTO_INGEST_POLL_SECONDS = int(get_env("AUTO_INGEST_POLL_SECONDS", "30"))
 AUTO_INGEST_BATCH_SIZE = int(get_env("AUTO_INGEST_BATCH_SIZE", "10"))
 DEFAULT_CHUNK_MAX_TOKENS = 300
 DEFAULT_CHUNK_OVERLAP_TOKENS = 40
+MAX_INGEST_CHUNK_CHARS = max(1_000, int(get_env("MAX_INGEST_CHUNK_CHARS", "12000")))
 
 
 class SelectedDocumentPayload(BaseModel):
@@ -112,28 +113,68 @@ def _chunk_text(text: str, max_tokens: int, overlap_tokens: int) -> List[Dict[st
     return _chunk_blocks(blocks, max_tokens=max_tokens, overlap_tokens=overlap_tokens)
 
 
+def _split_text_for_storage(text: str) -> List[str]:
+    """Split oversized extracted rows without dropping content."""
+    value = (text or "").strip()
+    if not value:
+        return []
+    if len(value) <= MAX_INGEST_CHUNK_CHARS:
+        return [value]
+
+    parts: List[str] = []
+    remaining = value
+    while remaining:
+        if len(remaining) <= MAX_INGEST_CHUNK_CHARS:
+            parts.append(remaining)
+            break
+        split_at = remaining.rfind(" ", 0, MAX_INGEST_CHUNK_CHARS)
+        if split_at <= 0:
+            split_at = MAX_INGEST_CHUNK_CHARS
+        parts.append(remaining[:split_at].strip())
+        remaining = remaining[split_at:].strip()
+    return [part for part in parts if part]
+
+
 def _prepare_excel_chunks(local_path: str, document_id: str, file_name: str) -> List[Dict[str, Any]]:
     workbook_record = extract_excel_workbook(local_path)
     ingestion_records = workbook_record_to_ingestion_records(workbook_record)
 
     prepared_chunks: List[Dict[str, Any]] = []
-    for idx, record in enumerate(ingestion_records):
-        chunk_text = record.text
+    chunk_index = 0
+    for record in ingestion_records:
+        chunk_text = (record.text or "").strip()
+        if not chunk_text:
+            logger.info(
+                "Skipping blank Excel row group | document_id=%s sheet=%s row=%s",
+                document_id,
+                record.metadata.get("sheet_name"),
+                record.metadata.get("row_number"),
+            )
+            continue
         metadata = dict(record.metadata)
         metadata.setdefault("source_file", file_name)
-        prepared_chunks.append(
-            {
-                "chunk_id": make_deterministic_chunk_id(document_id, idx, chunk_text),
-                "chunk_index": idx,
-                "heading": f"Sheet: {metadata.get('sheet_name')}" if metadata.get("sheet_name") else "Excel Row",
-                "source_file": file_name,
-                "document_type": "excel",
-                "sheet_name": metadata.get("sheet_name"),
-                "row_number": metadata.get("row_number"),
-                "metadata": metadata,
-                "chunk": chunk_text,
-            }
-        )
+        text_parts = _split_text_for_storage(chunk_text)
+        for part_number, text_part in enumerate(text_parts, start=1):
+            part_metadata = dict(metadata)
+            part_metadata["chunk_part"] = part_number
+            part_metadata["chunk_part_count"] = len(text_parts)
+            heading = f"Sheet: {metadata.get('sheet_name')}" if metadata.get("sheet_name") else "Excel Row"
+            if len(text_parts) > 1:
+                heading = f"{heading} | Part {part_number}/{len(text_parts)}"
+            prepared_chunks.append(
+                {
+                    "chunk_id": make_deterministic_chunk_id(document_id, chunk_index, text_part),
+                    "chunk_index": chunk_index,
+                    "heading": heading,
+                    "source_file": file_name,
+                    "document_type": "excel",
+                    "sheet_name": metadata.get("sheet_name"),
+                    "row_number": metadata.get("row_number"),
+                    "metadata": part_metadata,
+                    "chunk": text_part,
+                }
+            )
+            chunk_index += 1
 
     return prepared_chunks
 
@@ -176,16 +217,44 @@ def _anonymize_prepared_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, A
     return anonymized_chunks
 
 
-def _embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _embed_chunks(
+    chunks: List[Dict[str, Any]],
+    *,
+    document_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     if not chunks:
         return []
 
     embedder = OCIEmbeddingService()
-    texts = [c.get("chunk", "") for c in chunks]
+    valid_chunks = []
+    for chunk in chunks:
+        if (chunk.get("chunk") or "").strip():
+            valid_chunks.append(chunk)
+        else:
+            metadata = chunk.get("metadata") or {}
+            logger.warning(
+                "Skipping blank chunk before embedding | document_id=%s sheet=%s row=%s chunk_index=%s",
+                document_id,
+                metadata.get("sheet_name"),
+                metadata.get("row_number"),
+                chunk.get("chunk_index"),
+            )
+
+    texts = [c.get("chunk", "") for c in valid_chunks]
     vectors = embedder.embed_texts(texts)
 
     output: List[Dict[str, Any]] = []
-    for chunk, vector in zip(chunks, vectors):
+    for chunk, vector in zip(valid_chunks, vectors):
+        if not isinstance(vector, list) or not vector:
+            metadata = chunk.get("metadata") or {}
+            logger.error(
+                "Skipping chunk with empty embedding | document_id=%s sheet=%s row=%s chunk_index=%s",
+                document_id,
+                metadata.get("sheet_name"),
+                metadata.get("row_number"),
+                chunk.get("chunk_index"),
+            )
+            continue
         row = dict(chunk)
         row["embedding"] = vector
         output.append(row)
@@ -359,7 +428,7 @@ def _process_document(
             step_name="EMBED",
             step_sequence=4,
             created_by=requested_by,
-            action=lambda: _embed_chunks(prepared_chunks),
+            action=lambda: _embed_chunks(prepared_chunks, document_id=document_id),
         )
         stored_chunks = _run_logged_step(
             run_id=run_id,
